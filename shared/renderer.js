@@ -16,9 +16,11 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
-function renderReport(data) {
+function renderReport(data, options) {
   el('reportSection').classList.remove('hidden');
   el('emptyState').classList.add('hidden');
+
+  const selectable = !!(options && options.selectable);
 
   // 渲染摘要
   renderSummary(data.summary);
@@ -30,7 +32,7 @@ function renderReport(data) {
   const groupContainer = el('groupContainer');
   groupContainer.innerHTML = '';
   for (const group of groups) {
-    groupContainer.appendChild(createGroupElement(group));
+    groupContainer.appendChild(createGroupElement(group, selectable));
   }
 
   // 渲染清理标签
@@ -89,7 +91,7 @@ function groupResults(results) {
     .map(g => ({ ...g, items: map[g.key] }));
 }
 
-function createGroupElement(group) {
+function createGroupElement(group, selectable) {
   const section = document.createElement('div');
   section.className = 'group-section';
 
@@ -110,6 +112,7 @@ function createGroupElement(group) {
   table.innerHTML = `
     <thead>
       <tr>
+        ${selectable ? '<th class="cell-check"></th>' : ''}
         <th>${t('thBookmark')}</th>
         <th>${t('thPageTitle')}</th>
         <th>${t('thLastChapter')}</th>
@@ -118,6 +121,10 @@ function createGroupElement(group) {
     <tbody>
       ${group.items.map(item => `
         <tr>
+          ${selectable ? `
+          <td class="cell-check">
+            <input type="checkbox" class="rescan-check" data-url="${escapeHtml(item.url)}" title="${t('tipRescan')}">
+          </td>` : ''}
           <td class="cell-bookmark">
             <a href="${escapeHtml(item.url)}" target="_blank" title="${escapeHtml(item.bookmarkName)}">
               ${escapeHtml(item.bookmarkName)}

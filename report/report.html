@@ -15,6 +15,16 @@
       <p class="subtitle" id="reportMeta" data-i18n="loading">加载中...</p>
     </div>
     <div class="header-actions">
+      <select id="rescanConcurrency" class="concurrency-select">
+        <option value="1" data-i18n="concurrency1">1 并发</option>
+        <option value="3" selected data-i18n="concurrency3">3 并发</option>
+        <option value="5" data-i18n="concurrency5">5 并发</option>
+        <option value="10" data-i18n="concurrency10">10 并发</option>
+      </select>
+      <label class="force-label" data-i18n-title="tipTimeout">
+        <input type="number" id="rescanTimeout" min="5" max="300" value="30"> <span data-i18n="seconds">秒</span>
+      </label>
+      <button id="rescanBtn" class="btn-ghost" data-i18n="rescanSelected" data-i18n-title="tipRescan" disabled>重扫选中</button>
       <button id="copyBtn" class="btn-ghost" data-i18n="copyText">复制文本</button>
       <button id="exportBtn" class="btn-ghost" data-i18n="exportJson">导出 JSON</button>
       <button id="refreshBtn" class="btn-ghost" data-i18n="refresh">刷新</button>

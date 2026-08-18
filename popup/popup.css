@@ -391,6 +391,19 @@ body {
   font-weight: normal;
 }
 
+/* 重扫勾选列 */
+.result-table th.cell-check,
+.result-table td.cell-check {
+  width: 28px;
+  padding-right: 0;
+  text-align: center;
+}
+
+.rescan-check {
+  accent-color: #3b82f6;
+  cursor: pointer;
+}
+
 /* Empty state */
 .empty-state {
   text-align: center;

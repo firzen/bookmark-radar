@@ -60,6 +60,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   } else if (message.action === 'stopScan') {
     scanState.shouldStop = true;
     sendResponse({ stopped: true });
+  } else if (message.action === 'rescanBookmarks') {
+    // 条目级重扫：忽略缓存，只扫勾选的 URL
+    if (scanState.isScanning) {
+      sendResponse({ error: t('scanRunning') });
+      return false;
+    }
+    rescanUrls(message.urls || [], message.concurrency, message.timeout)
+      .then((r) => sendResponse(r));
+    return true; // 异步响应
   }
   return false;
 });
@@ -158,6 +167,9 @@ async function isTabAlive(tabId) {
 
 /**
  * 等待标签页加载完成
+ * 除标签 status=complete 外，还会轮询 document.readyState：
+ * 部分页面因广告/统计脚本挂起导致 load 永不触发（标签一直 loading），
+ * 但 DOM 已解析完毕（readyState=interactive），此时内容已可提取，不应判为超时
  * @param {string} [expectedUrl] - 目标 URL，立即检查时需匹配，避免读到上一轮的 complete 状态
  */
 function waitForTabComplete(tabId, timeoutMs = 30000, expectedUrl = null) {
@@ -175,8 +187,28 @@ function waitForTabComplete(tabId, timeoutMs = 30000, expectedUrl = null) {
       if (resolved) return;
       resolved = true;
       chrome.tabs.onUpdated.removeListener(listener);
+      clearInterval(readyStatePoller);
       clearTimeout(timer);
     };
+
+    // 轮询 readyState：导航未提交/跨源重定向中注入会失败，忽略继续
+    const readyStatePoller = setInterval(async () => {
+      try {
+        // 守卫：新导航还没提交时读到的是上一份文档（如 about:blank）
+        const tab = await chrome.tabs.get(tabId);
+        if (!/^https?:/.test(tab.url)) return;
+        const [res] = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: () => document.readyState,
+        });
+        if (res && (res.result === 'interactive' || res.result === 'complete')) {
+          cleanup();
+          resolve(true);
+        }
+      } catch (e) {
+        // 页面尚未提交导航或已关闭，下一轮再试
+      }
+    }, 1000);
 
     const timer = setTimeout(() => {
       cleanup();
@@ -589,6 +621,177 @@ async function startScan(concurrency, force, humanVerify, timeoutSec) {
       }
     }
   }
+}
+
+/**
+ * 重扫指定书签（忽略缓存，用于纠正误判条目）
+ * 复用 processBookmark 流程与并发调度，新结果写回缓存并合并进现有报告
+ * @param {string[]} urls - 勾选的书签 URL
+ * @param {number} concurrency - 并发标签页数
+ * @param {number} timeoutSec - 页面加载超时秒数
+ */
+async function rescanUrls(urls, concurrency, timeoutSec) {
+  const uniqueUrls = Array.from(new Set(urls));
+  if (uniqueUrls.length === 0) return { success: false };
+
+  // 超时秒数：与全量扫描相同的钳制规则
+  const sec = parseInt(timeoutSec, 10);
+  loadTimeoutMs = (Number.isFinite(sec) && sec >= 5 ? Math.min(sec, 300) : 30) * 1000;
+
+  scanState.isScanning = true;
+  scanState.shouldStop = false;
+  scanState.results = [];
+  scanState.startTime = Date.now();
+  chrome.action.setBadgeBackgroundColor({ color: '#3b82f6' });
+  chrome.action.setBadgeText({ text: '0%' });
+
+  let workerTabs = [];
+  let tree = null;
+  const newResults = new Map();
+
+  try {
+    tree = await chrome.bookmarks.getTree();
+    const urlMap = new Map();
+    for (const bm of flattenBookmarks(tree)) {
+      if (!urlMap.has(bm.url)) urlMap.set(bm.url, bm);
+    }
+    const targets = uniqueUrls.map((u) => urlMap.get(u)).filter(Boolean);
+
+    scanState.total = targets.length;
+    scanState.progress = 0;
+    sendProgressUpdate();
+
+    // 实际并发不超过待扫书签数
+    const workerCount = Math.min(concurrency || DEFAULT_CONCURRENCY, targets.length);
+
+    // 创建工作标签页 + 折叠标签组
+    if (workerCount > 0) {
+      const tabIds = [];
+      for (let i = 0; i < workerCount; i++) {
+        const tab = await chrome.tabs.create({ url: 'about:blank', active: false });
+        workerTabs.push({ id: tab.id, index: i });
+        tabIds.push(tab.id);
+      }
+      try {
+        const groupId = await chrome.tabs.group({ tabIds });
+        await chrome.tabGroups.update(groupId, {
+          title: 'Bookmark Radar',
+          color: 'blue',
+          collapsed: true,
+        });
+      } catch (e) {
+        console.warn('创建标签组失败，继续无组模式:', e);
+      }
+    }
+
+    // 轮询分配给各 worker
+    const workerQueues = Array.from({ length: workerCount }, () => []);
+    targets.forEach((bm, i) => {
+      workerQueues[i % workerCount].push(bm);
+    });
+
+    const cachedData = await chrome.storage.local.get('resultCache');
+    const resultCache = cachedData.resultCache || {};
+
+    const workerPromises = workerTabs.map(async (worker) => {
+      for (const bookmark of workerQueues[worker.index]) {
+        if (scanState.shouldStop) throw new Error('SCAN_STOPPED');
+        if (!(await isTabAlive(worker.id))) throw new Error('TAB_CLOSED');
+
+        scanState.currentBookmark = bookmark.title;
+        sendProgressUpdate();
+
+        const result = await processBookmark(bookmark, worker.id);
+
+        // 缓存规则与全量扫描一致
+        if (result.status !== 'timeout'
+          && result.status !== 'cf_challenge'
+          && !result.isDirectory) {
+          resultCache[bookmark.url] = { result, checkedAt: Date.now() };
+          await chrome.storage.local.set({ resultCache });
+        }
+
+        if (scanState.shouldStop) throw new Error('SCAN_STOPPED');
+
+        newResults.set(bookmark.url, result);
+        scanState.progress++;
+        sendProgressUpdate();
+        await new Promise((r) => setTimeout(r, 300));
+      }
+    });
+
+    await Promise.all(workerPromises);
+
+    // 新结果合并进现有报告
+    await mergeRescanResults(newResults, tree);
+    sendScanComplete();
+    return { success: true };
+  } catch (error) {
+    if (error.message === 'SCAN_STOPPED') {
+      console.log('[Bookmark Radar] 重扫已手动停止');
+      await mergeRescanResults(newResults, tree); // 保留已完成条目
+      sendScanComplete();
+      return { success: false, stopped: true };
+    } else if (error.message === 'TAB_CLOSED') {
+      console.warn('[Bookmark Radar] 重扫中断：标签页被关闭');
+      await mergeRescanResults(newResults, tree);
+      sendScanComplete();
+      chrome.runtime.sendMessage({
+        type: 'scanError',
+        error: t('tabClosedError'),
+      }).catch(() => {});
+      return { success: false };
+    }
+    console.error('[Bookmark Radar] 重扫出错:', error);
+    chrome.runtime.sendMessage({
+      type: 'scanError',
+      error: error.message || t('unknownError'),
+    }).catch(() => {});
+    return { success: false };
+  } finally {
+    scanState.isScanning = false;
+    chrome.action.setBadgeText({ text: '' });
+    for (const worker of workerTabs) {
+      try {
+        await chrome.tabs.remove(worker.id);
+      } catch (e) {
+        // 标签可能已被手动关闭
+      }
+    }
+  }
+}
+
+/**
+ * 把重扫结果替换进 scanResults 对应 URL，重建 summary/cleanup
+ */
+async function mergeRescanResults(newResults, tree) {
+  if (newResults.size === 0) return;
+  const data = await chrome.storage.local.get('scanResults');
+  const old = data.scanResults;
+  if (!old) return;
+
+  const results = old.results.map((r) => newResults.get(r.url) || r);
+  // 旧报告里没有的书签（如部分报告遗漏）追加到末尾
+  const known = new Set(old.results.map((r) => r.url));
+  for (const [url, result] of newResults) {
+    if (!known.has(url)) results.push(result);
+  }
+
+  const reportData = {
+    ...old,
+    timestamp: new Date().toISOString(),
+    results,
+    summary: buildSummary(results),
+    cleanup: {
+      deadLinks: results.filter(
+        (r) => ['network_error', 'server_error', 'access_denied', 'not_found'].includes(r.status)
+      ),
+      timeouts: results.filter((r) => r.status === 'timeout'),
+      duplicates: old.cleanup ? old.cleanup.duplicates : (tree ? findDuplicates(tree) : []),
+      emptyFolders: old.cleanup ? old.cleanup.emptyFolders : (tree ? findEmptyFolders(tree) : []),
+    },
+  };
+  await chrome.storage.local.set({ scanResults: reportData });
 }
 
 /**

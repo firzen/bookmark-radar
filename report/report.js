@@ -11,10 +11,14 @@ const currentBookmark = document.getElementById('currentBookmark');
 const copyBtn = document.getElementById('copyBtn');
 const exportBtn = document.getElementById('exportBtn');
 const refreshBtn = document.getElementById('refreshBtn');
+const rescanBtn = document.getElementById('rescanBtn');
+const rescanConcurrency = document.getElementById('rescanConcurrency');
+const rescanTimeout = document.getElementById('rescanTimeout');
 const analysisTab = document.getElementById('analysisTab');
 const cleanupTab = document.getElementById('cleanupTab');
 
 let currentResults = null;
+let rescanning = false; // 重扫进行中，禁用重扫按钮
 
 // 静态文案按浏览器语言填充
 applyI18n();
@@ -25,6 +29,7 @@ async function init() {
   // 若扫描正在进行，显示进度横幅
   const status = await chrome.runtime.sendMessage({ action: 'getScanStatus' });
   if (status && status.isScanning) {
+    rescanning = true;
     showProgress(status.progress, status.total, status.currentBookmark);
   }
 
@@ -42,17 +47,21 @@ async function load() {
   if (currentResults.partial) meta.push(t('partialHint'));
   reportMeta.textContent = meta.join(' · ');
 
-  renderReport(currentResults);
+  renderReport(currentResults, { selectable: true });
+  updateRescanBtn();
 }
 
 // 实时消息：进度 / 完成 / 出错
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === 'scanProgress') {
+    rescanning = true;
     showProgress(message.progress, message.total, message.currentBookmark);
   } else if (message.type === 'scanComplete') {
+    rescanning = false;
     hideProgress();
     load();
   } else if (message.type === 'scanError') {
+    rescanning = false;
     hideProgress();
     load();
   }
@@ -107,3 +116,29 @@ exportBtn.addEventListener('click', () => {
 
 // 刷新
 refreshBtn.addEventListener('click', load);
+
+// --- 勾选重扫：忽略缓存重新扫描勾选的书签 ---
+
+// 勾选变化时更新按钮文案/状态（事件委托，重渲染后依然有效）
+document.addEventListener('change', (e) => {
+  if (e.target.classList.contains('rescan-check')) updateRescanBtn();
+});
+
+function updateRescanBtn() {
+  const n = document.querySelectorAll('.rescan-check:checked').length;
+  rescanBtn.disabled = rescanning || n === 0;
+  rescanConcurrency.disabled = rescanning;
+  rescanTimeout.disabled = rescanning;
+  rescanBtn.textContent = n > 0 ? t('rescanCount', [String(n)]) : t('rescanSelected');
+}
+
+rescanBtn.addEventListener('click', async () => {
+  const urls = Array.from(document.querySelectorAll('.rescan-check:checked'))
+    .map((cb) => cb.dataset.url);
+  if (urls.length === 0 || rescanning) return;
+  rescanning = true;
+  updateRescanBtn();
+  const concurrency = parseInt(rescanConcurrency.value, 10) || 3;
+  const timeout = parseInt(rescanTimeout.value, 10) || 30;
+  await chrome.runtime.sendMessage({ action: 'rescanBookmarks', urls, concurrency, timeout });
+});
