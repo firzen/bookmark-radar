@@ -166,18 +166,61 @@ async function isTabAlive(tabId) {
 }
 
 /**
- * 等待标签页加载完成
+ * 导航到目标 URL 并等待该次导航的页面加载完成。
+ *
+ * 复用标签页时，上一页的 `complete` 事件可能会在下一次 `tabs.update()` 后才
+ * 到达。不能只按 tabId 判断，否则会把上一页的 DOM 当作当前书签来提取。
+ * 这里先注册监听器，再发起导航，并要求本次导航至少出现过目标 URL，才接受
+ * complete/readyState 信号；目标 URL 后的重定向仍会被允许。
+ *
  * 除标签 status=complete 外，还会轮询 document.readyState：
  * 部分页面因广告/统计脚本挂起导致 load 永不触发（标签一直 loading），
  * 但 DOM 已解析完毕（readyState=interactive），此时内容已可提取，不应判为超时
- * @param {string} [expectedUrl] - 目标 URL，立即检查时需匹配，避免读到上一轮的 complete 状态
+ * @param {string} expectedUrl - 本次导航请求的目标 URL
  */
-function waitForTabComplete(tabId, timeoutMs = 30000, expectedUrl = null) {
+function navigateAndWaitForTabComplete(tabId, expectedUrl, timeoutMs = 30000) {
   return new Promise((resolve) => {
     let resolved = false;
 
-    const listener = (updatedTabId, changeInfo) => {
-      if (updatedTabId === tabId && changeInfo.status === 'complete') {
+    // 忽略 hash 差异：Chrome 有时会在导航过程中省略或单独处理 fragment。
+    const isExpectedUrl = (url) => {
+      if (!url) return false;
+      try {
+        const actual = new URL(url);
+        const expected = new URL(expectedUrl);
+        actual.hash = '';
+        expected.hash = '';
+        return actual.href === expected.href;
+      } catch (e) {
+        return url === expectedUrl;
+      }
+    };
+
+    let sawTargetUrl = false;
+    let targetDocumentStarted = false;
+
+    const listener = async (updatedTabId, changeInfo) => {
+      if (updatedTabId !== tabId) return;
+
+      // 看到目标 URL 表明后续即使跳转到其他地址，仍属于本次导航。
+      if (changeInfo.url && isExpectedUrl(changeInfo.url)) {
+        sawTargetUrl = true;
+        targetDocumentStarted = true;
+      }
+
+      if (changeInfo.status === 'loading') {
+        try {
+          const tab = await chrome.tabs.get(tabId);
+          if (isExpectedUrl(tab.url) || isExpectedUrl(tab.pendingUrl)) {
+            sawTargetUrl = true;
+            targetDocumentStarted = true;
+          }
+        } catch (e) {
+          // 标签页可能已关闭，超时逻辑会负责结束等待。
+        }
+      }
+
+      if (changeInfo.status === 'complete' && sawTargetUrl && targetDocumentStarted) {
         cleanup();
         resolve(true);
       }
@@ -194,7 +237,8 @@ function waitForTabComplete(tabId, timeoutMs = 30000, expectedUrl = null) {
     // 轮询 readyState：导航未提交/跨源重定向中注入会失败，忽略继续
     const readyStatePoller = setInterval(async () => {
       try {
-        // 守卫：新导航还没提交时读到的是上一份文档（如 about:blank）
+        // 新导航尚未提交时，不能对上一份文档的 readyState 做出反应。
+        if (!targetDocumentStarted) return;
         const tab = await chrome.tabs.get(tabId);
         if (!/^https?:/.test(tab.url)) return;
         const [res] = await chrome.scripting.executeScript({
@@ -217,16 +261,11 @@ function waitForTabComplete(tabId, timeoutMs = 30000, expectedUrl = null) {
 
     chrome.tabs.onUpdated.addListener(listener);
 
-    // 检查是否已经加载完成（必须匹配目标 URL，防止误读上一轮状态）
-    chrome.tabs.get(tabId, (tab) => {
-      if (chrome.runtime.lastError || !tab) {
+    // 必须在监听器注册完成后才发起导航，避免漏掉极快页面的 URL/loading 事件。
+    chrome.tabs.update(tabId, { url: expectedUrl }).catch(() => {
+      if (!resolved) {
         cleanup();
         resolve(false);
-        return;
-      }
-      if (tab.status === 'complete' && (!expectedUrl || tab.url === expectedUrl)) {
-        cleanup();
-        resolve(true);
       }
     });
   });
@@ -264,14 +303,8 @@ async function activateTabForChallenge(tabId) {
  */
 async function processBookmark(bookmark, tabId) {
   try {
-    // 导航到目标 URL
-    await chrome.tabs.update(tabId, { url: bookmark.url });
-
-    // 短暂等待导航开始（避免读到上一轮的 complete 状态）
-    await new Promise((r) => setTimeout(r, 200));
-
-    // 等待加载完成
-    const loaded = await waitForTabComplete(tabId, loadTimeoutMs, bookmark.url);
+    // 导航并等待本次导航对应的文档完成，避免读取复用标签页中的上一页。
+    const loaded = await navigateAndWaitForTabComplete(tabId, bookmark.url, loadTimeoutMs);
 
     if (!loaded) {
       return {
