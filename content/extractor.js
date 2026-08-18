@@ -60,7 +60,10 @@
   ];
 
   for (const sig of errorSignatures) {
-    if (sig.pattern.test(bodyText) || sig.pattern.test(document.documentElement.outerHTML)) {
+    // 全文 HTML 匹配仅限内容极少且几乎无链接的页面（典型错误页）；
+    // 避免正常页面的脚本/文案中提及错误字符串时被误判
+    const smallPage = bodyText.length < 2000 && document.querySelectorAll('a[href]').length < 10;
+    if (sig.pattern.test(bodyText) || (smallPage && sig.pattern.test(document.documentElement.outerHTML))) {
       return {
         title: document.title || '',
         isDirectory: false,
@@ -87,6 +90,9 @@
     /^\s*\d{3,}\s*[-_.\s]/,
     // "XX话" 无第字
     /[\d]+[\s]*[话話]/,
+    // 数字开头（可带短英文前缀）+ 中文标题，如 "668探墓"、"TBW36 父母心"；
+    // 单看较宽松，靠密集列表的占比/数量门槛防误判
+    /^\s*[A-Za-z]{0,6}\s*\d{1,4}\s*[、.．\-_：:，]?\s*[\u4e00-\u9fa5]/,
   ];
 
   /**
@@ -132,11 +138,74 @@
     return null;
   }
 
+  /** 清理链接文本：压缩空白、去掉（47P）这类页数后缀 */
+  function cleanLinkText(link) {
+    return (link.textContent || '').trim()
+      .replace(/（\s*\d+\s*[Pp]）/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /** 单个章节列表内的最新一话：按首尾序号判断升/降序 */
+  function latestInList(chapters) {
+    const numbered = chapters.filter((cl) => cl.number !== null);
+    if (numbered.length >= 3) {
+      const head = numbered.slice(0, 3);
+      const tail = numbered.slice(-3);
+      const headAvg = head.reduce((s, cl) => s + cl.number, 0) / head.length;
+      const tailAvg = tail.reduce((s, cl) => s + cl.number, 0) / tail.length;
+      return tailAvg >= headAvg ? chapters[chapters.length - 1] : chapters[0];
+    }
+    return chapters[chapters.length - 1];
+  }
+
+  /**
+   * 密集章节列表检测：容器内大部分链接都是章节链接。
+   * 只看局部列表，不受整页导航链接噪声影响；
+   * 对章节数少的小作品同样有效。
+   */
+  function findChapterLists() {
+    const containers = Array.from(document.querySelectorAll(
+      'ul, ol, [class*="chapter"], [class*="list"], [class*="catalog"], [class*="directory"]'));
+    const candidates = [];
+    for (const container of containers) {
+      const links = Array.from(container.querySelectorAll('a[href]'));
+      if (links.length < 3 || links.length > 600) continue;
+      const chapters = [];
+      for (const link of links) {
+        if (isChapterLink(link)) {
+          const text = cleanLinkText(link);
+          chapters.push({ element: link, text, number: extractChapterNumber(text) });
+        }
+      }
+      if (chapters.length >= 3 && chapters.length / links.length >= 0.6) {
+        candidates.push({ container, chapters });
+      }
+    }
+    // 去掉包裹了其他候选的外层容器，保留最内层密集列表
+    return candidates.filter((c) =>
+      !candidates.some((o) => o !== c && c.container.contains(o.container)));
+  }
+
   /**
    * 判断页面是否为目录页
-   * 策略：统计章节链接占比和绝对数量
+   * 策略：优先找密集章节列表；找不到再退回全局占比/数量评分
    */
   function analyzeDirectory() {
+    // 1) 密集章节列表：每列表取最新一话，再跨列表取序号最大者
+    const lists = findChapterLists();
+    if (lists.length > 0) {
+      let best = null;
+      for (const list of lists) {
+        const latest = latestInList(list.chapters);
+        if (!best || (latest.number !== null && (best.number === null || latest.number > best.number))) {
+          best = latest;
+        }
+      }
+      return { isDirectory: true, lastChapter: best.text };
+    }
+
+    // 2) 回退：全局评分（无列表容器的页面）
     if (allLinks.length < 5) {
       return { isDirectory: false, lastChapter: null };
     }
@@ -145,7 +214,7 @@
 
     for (const link of allLinks) {
       if (isChapterLink(link)) {
-        const text = link.textContent.trim();
+        const text = cleanLinkText(link);
         const num = extractChapterNumber(text);
         chapterLinks.push({ element: link, text, number: num });
       }
@@ -175,28 +244,7 @@
       return { isDirectory: false, lastChapter: null };
     }
 
-    // 判断排序方向（升序 or 降序）
-    const numbered = chapterLinks.filter(cl => cl.number !== null);
-    let lastChapter;
-
-    if (numbered.length >= 3) {
-      const first3Avg = (numbered[0].number + numbered[1].number + numbered[2].number) / 3;
-      const last3 = numbered.slice(-3);
-      const last3Avg = (last3[0].number + last3[1].number + last3[2].number) / 3;
-
-      if (last3Avg >= first3Avg) {
-        // 升序：最后一项是最新
-        lastChapter = chapterLinks[chapterLinks.length - 1].text;
-      } else {
-        // 降序：第一项是最新
-        lastChapter = chapterLinks[0].text;
-      }
-    } else {
-      // 无法判断序号，取最后一项
-      lastChapter = chapterLinks[chapterLinks.length - 1].text;
-    }
-
-    return { isDirectory: true, lastChapter };
+    return { isDirectory: true, lastChapter: latestInList(chapterLinks).text };
   }
 
   const result = analyzeDirectory();
