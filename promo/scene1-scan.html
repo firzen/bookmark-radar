@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Bookmark Radar · Scene 1</title>
+  <link rel="stylesheet" href="promo.css">
+</head>
+<body>
+  <div class="canvas">
+    <!-- 左侧文案 -->
+    <div class="pitch">
+      <div class="brand">
+        <img src="../icons/icon128.png" alt="Bookmark Radar">
+        <span class="name">Bookmark Radar</span>
+      </div>
+      <h1 data-i18n="headline">一键扫描全部书签</h1>
+      <p class="tagline" data-i18n="tagline">真实标签页并发检查 · 后台静默运行</p>
+      <ul>
+        <li data-i18n="b1">1 / 3 / 5 / 10 个标签页并发扫描，速度自由掌控</li>
+        <li data-i18n="b2">真实浏览器环境打开网页，轻松绕过 CORS 与反爬限制</li>
+        <li data-i18n="b3">随时停止，已扫描结果立即保留，30 天智能缓存</li>
+      </ul>
+      <div class="badge-hint">
+        <span class="icon-badge">62%</span>
+        <span data-i18n="badgeHint">工具栏角标实时显示扫描进度</span>
+      </div>
+    </div>
+
+    <!-- 右侧窗口模拟 -->
+    <div class="shot">
+      <div class="window">
+        <div class="window-bar">
+          <span class="dot dot-r"></span>
+          <span class="dot dot-y"></span>
+          <span class="dot dot-g"></span>
+          <span class="addr">chrome-extension://bookmark-radar/popup/popup.html</span>
+        </div>
+        <div class="window-body">
+          <div class="mock-header">
+            <div>
+              <h2>Bookmark Radar</h2>
+              <div class="sub" data-i18n="popupSub">扫描书签 · 追踪更新 · 清理死链</div>
+            </div>
+            <button class="btn stop" data-i18n="stop">停止</button>
+          </div>
+          <div class="mock-card">
+            <div class="progress-wrap">
+              <div class="progress-info">
+                <span data-i18n="scanning">正在扫描… 62%</span>
+                <span>415 / 670</span>
+              </div>
+              <div class="progress-bar"><div class="progress-fill"></div></div>
+              <div class="progress-current" data-i18n="current">正在检查：斗破苍穹 · 章节目录</div>
+            </div>
+          </div>
+          <div class="mock-card">
+            <div class="group-head">
+              <span class="dot d-success"></span>
+              <span class="g-title" data-i18n="chapters">已提取章节</span>
+              <span class="g-count">12</span>
+            </div>
+            <table class="mock-table">
+              <thead>
+                <tr>
+                  <th data-i18n="thBk">书签名</th>
+                  <th data-i18n="thCh">最后一话</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="bk" data-i18n="r1bk">诡秘之主 · 目录</td>
+                  <td class="ch" data-i18n="r1ch">第一千四百三十二章 新的旅程（大结局）</td>
+                </tr>
+                <tr>
+                  <td class="bk" data-i18n="r2bk">One Piece · Index</td>
+                  <td class="ch">Chapter 1152</td>
+                </tr>
+                <tr>
+                  <td class="bk" data-i18n="r3bk">凡人修仙传 · 章节目录</td>
+                  <td class="ch" data-i18n="r3ch">第两千四百四十六章 飞升</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="promo.js"></script>
+  <script>
+    applyPromoI18n({
+      zh: {
+        headline: '一键扫描全部书签',
+        tagline: '真实标签页并发检查 · 后台静默运行',
+        b1: '1 / 3 / 5 / 10 个标签页并发扫描，速度自由掌控',
+        b2: '真实浏览器环境打开网页，轻松绕过 CORS 与反爬限制',
+        b3: '随时停止，已扫描结果立即保留，30 天智能缓存',
+        badgeHint: '工具栏角标实时显示扫描进度',
+        popupSub: '扫描书签 · 追踪更新 · 清理死链',
+        stop: '停止',
+        scanning: '正在扫描… 62%',
+        current: '正在检查：斗破苍穹 · 章节目录',
+        chapters: '已提取章节',
+        thBk: '书签名',
+        thCh: '最后一话',
+        r1bk: '诡秘之主 · 目录',
+        r1ch: '第一千四百三十二章 新的旅程（大结局）',
+        r2bk: 'One Piece · Index',
+        r3bk: '凡人修仙传 · 章节目录',
+        r3ch: '第两千四百四十六章 飞升',
+      },
+      en: {
+        headline: 'Scan All Your Bookmarks in One Click',
+        tagline: 'Real tabs in parallel · Silent background scan',
+        b1: 'Scan with 1 / 3 / 5 / 10 concurrent tabs — speed under your control',
+        b2: 'Pages open in real browser tabs, bypassing CORS & anti-bot limits',
+        b3: 'Stop anytime — results are kept instantly, smart 30-day cache',
+        badgeHint: 'Toolbar badge shows live scan progress',
+        popupSub: 'Scan · Track updates · Clean up',
+        stop: 'Stop',
+        scanning: 'Scanning… 62%',
+        current: 'Checking: Battle Through the Heavens · Chapter Index',
+        chapters: 'Extracted Chapters',
+        thBk: 'Bookmark',
+        thCh: 'Last Chapter',
+        r1bk: 'Lord of the Mysteries · Index',
+        r1ch: 'Chapter 1432: A New Journey (Finale)',
+        r2bk: 'One Piece · Index',
+        r3bk: 'A Record of a Mortal\'s Journey to Immortality',
+        r3ch: 'Chapter 2446: Ascension',
+      },
+    });
+  </script>
+</body>
+</html>

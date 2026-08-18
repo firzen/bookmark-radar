@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="popupTitle">Bookmark Radar</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <!-- 顶部 -->
+  <header class="header">
+    <div class="header-top">
+      <div class="header-left">
+        <h1>Bookmark Radar</h1>
+        <p class="subtitle" data-i18n="subtitle">扫描书签 · 追踪更新 · 清理死链</p>
+      </div>
+      <div class="header-actions">
+        <button id="scanBtn" class="btn-primary" data-i18n="startScan">开始扫描</button>
+        <button id="stopBtn" class="btn-stop hidden" data-i18n="stop">停止</button>
+      </div>
+    </div>
+    <div id="scanOptions" class="scan-options">
+      <select id="concurrencySelect" class="concurrency-select">
+        <option value="1" data-i18n="concurrency1">1 并发</option>
+        <option value="3" selected data-i18n="concurrency3">3 并发</option>
+        <option value="5" data-i18n="concurrency5">5 并发</option>
+        <option value="10" data-i18n="concurrency10">10 并发</option>
+      </select>
+      <label class="force-label" data-i18n-title="tipTimeout">
+        <input type="number" id="timeoutInput" min="5" max="300" value="30"> <span data-i18n="seconds">秒</span>
+      </label>
+      <label class="force-label" data-i18n-title="tipForce">
+        <input type="checkbox" id="forceScan"> <span data-i18n="force">强制</span>
+      </label>
+      <label class="force-label" data-i18n-title="tipHuman">
+        <input type="checkbox" id="humanVerify"> <span data-i18n="humanVerify">真人验证</span>
+      </label>
+    </div>
+  </header>
+
+  <!-- 进度条 -->
+  <section id="progressSection" class="progress-section hidden">
+    <div class="progress-info">
+      <span id="progressText" data-i18n="preparing">准备中...</span>
+      <span id="progressCount">0 / 0</span>
+    </div>
+    <div class="progress-bar">
+      <div id="progressFill" class="progress-fill"></div>
+    </div>
+    <div class="progress-bookmark" id="currentBookmark"></div>
+  </section>
+
+  <!-- 扫描完成后：打开完整报告入口 -->
+  <section id="openReportSection" class="open-report-section hidden">
+    <p id="scanMeta" class="scan-meta"></p>
+    <button id="openFullBtn" class="btn-primary" data-i18n="openFullReport">打开完整报告 ↗</button>
+  </section>
+
+  <!-- 已提取章节快捷列表 -->
+  <section id="chaptersSection" class="group-section hidden">
+    <div class="group-header">
+      <span class="status-dot dot-success"></span>
+      <span class="group-title" data-i18n="extractedChapters">已提取章节</span>
+      <span class="group-count" id="chaptersCount"></span>
+    </div>
+    <div class="group-body">
+      <table class="result-table">
+        <thead>
+          <tr>
+            <th data-i18n="thBookmark">书签名</th>
+            <th data-i18n="thLastChapter">最后一话</th>
+          </tr>
+        </thead>
+        <tbody id="chaptersBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 空状态 -->
+  <section id="emptyState" class="empty-state">
+    <div class="empty-icon">📚</div>
+    <p data-i18n="emptyTitle">点击「开始扫描」分析你的书签</p>
+    <p class="empty-hint" data-i18n="emptyHint">完成后打开完整报告查看结果与清理书签</p>
+  </section>
+
+  <script src="../shared/i18n.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

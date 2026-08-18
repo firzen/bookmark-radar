@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="reportPageTitle">Bookmark Radar · 完整报告</title>
+  <link rel="stylesheet" href="../popup/popup.css">
+  <link rel="stylesheet" href="report.css">
+</head>
+<body>
+  <!-- 顶部 -->
+  <header class="header">
+    <div class="header-left">
+      <h1 data-i18n="reportPageTitle">Bookmark Radar · 完整报告</h1>
+      <p class="subtitle" id="reportMeta" data-i18n="loading">加载中...</p>
+    </div>
+    <div class="header-actions">
+      <button id="copyBtn" class="btn-ghost" data-i18n="copyText">复制文本</button>
+      <button id="exportBtn" class="btn-ghost" data-i18n="exportJson">导出 JSON</button>
+      <button id="refreshBtn" class="btn-ghost" data-i18n="refresh">刷新</button>
+    </div>
+  </header>
+
+  <!-- 扫描进度横幅（扫描进行中时显示） -->
+  <section id="progressSection" class="progress-section hidden">
+    <div class="progress-info">
+      <span id="progressText" data-i18n="preparing">准备中...</span>
+      <span id="progressCount">0 / 0</span>
+    </div>
+    <div class="progress-bar">
+      <div id="progressFill" class="progress-fill"></div>
+    </div>
+    <div class="progress-bookmark" id="currentBookmark"></div>
+  </section>
+
+  <!-- 报告区域 -->
+  <section id="reportSection" class="report-section hidden">
+    <!-- 标签页切换 -->
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="analysis" data-i18n="tabAnalysis">内容分析</button>
+      <button class="tab-btn" data-tab="cleanup" data-i18n="tabCleanup">书签清理</button>
+    </div>
+
+    <!-- 内容分析标签 -->
+    <div id="analysisTab" class="tab-content">
+      <div class="summary-bar" id="summaryBar"></div>
+      <div id="groupContainer"></div>
+    </div>
+
+    <!-- 书签清理标签 -->
+    <div id="cleanupTab" class="tab-content hidden">
+      <div id="cleanupContainer"></div>
+    </div>
+  </section>
+
+  <!-- 空状态 -->
+  <section id="emptyState" class="empty-state">
+    <div class="empty-icon">📡</div>
+    <p data-i18n="noData">暂无报告数据</p>
+    <p class="empty-hint" data-i18n="noDataHint">请点击插件图标 → 「开始扫描」，完成后此处会自动刷新</p>
+  </section>
+
+  <script src="../shared/i18n.js"></script>
+  <script src="../shared/renderer.js"></script>
+  <script src="report.js"></script>
+</body>
+</html>

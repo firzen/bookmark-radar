@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Bookmark Radar · Scene 3</title>
+  <link rel="stylesheet" href="promo.css">
+</head>
+<body>
+  <div class="canvas">
+    <!-- 左侧文案 -->
+    <div class="pitch">
+      <div class="brand">
+        <img src="../icons/icon128.png" alt="Bookmark Radar">
+        <span class="name">Bookmark Radar</span>
+      </div>
+      <h1 data-i18n="headline">书签清理，一步到位</h1>
+      <p class="tagline" data-i18n="tagline">死链 · 超时 · 重复 · 空文件夹，分类呈现</p>
+      <ul>
+        <li data-i18n="b1">基于真实页面访问结果判定死链，比纯 HTTP 探测更准确</li>
+        <li data-i18n="b2">每条结果可点击打开，先亲自确认再决定删除</li>
+        <li data-i18n="b3">勾选后一键批量删除，随时全选 / 取消</li>
+      </ul>
+    </div>
+
+    <!-- 右侧窗口模拟 -->
+    <div class="shot">
+      <div class="window">
+        <div class="window-bar">
+          <span class="dot dot-r"></span>
+          <span class="dot dot-y"></span>
+          <span class="dot dot-g"></span>
+          <span class="addr">chrome-extension://bookmark-radar/report/report.html</span>
+        </div>
+        <div class="window-body">
+          <div class="mock-header">
+            <div>
+              <h2 data-i18n="cleanupTitle">书签清理</h2>
+              <div class="sub" data-i18n="cleanupSub">勾选需要删除的书签，确认后批量删除</div>
+            </div>
+          </div>
+
+          <div class="stat-row">
+            <div class="stat c-dead"><span class="num">5</span><span class="lbl" data-i18n="sDead">死链</span></div>
+            <div class="stat c-timeout"><span class="num">3</span><span class="lbl" data-i18n="sTimeout">加载超时</span></div>
+            <div class="stat c-dup"><span class="num">2</span><span class="lbl" data-i18n="sDup">重复书签</span></div>
+            <div class="stat c-empty"><span class="num">1</span><span class="lbl" data-i18n="sEmpty">空文件夹</span></div>
+          </div>
+
+          <div class="mock-card" style="margin-bottom:0;">
+            <div class="group-head">
+              <span class="dot d-dead"></span>
+              <span class="g-title" data-i18n="grpDead">死链</span>
+              <span class="g-count">5</span>
+            </div>
+            <div class="clean-item">
+              <input type="checkbox" checked>
+              <div class="info">
+                <div class="tt" data-i18n="d1t">旧版论坛存档</div>
+                <div class="uu">http://forum.example-old.com/thread/12345</div>
+              </div>
+              <span class="badge">DNS_PROBE_FINISHED_NXDOMAIN</span>
+            </div>
+            <div class="clean-item">
+              <input type="checkbox" checked>
+              <div class="info">
+                <div class="tt" data-i18n="d2t">小说合集 TXT 下载</div>
+                <div class="uu">https://dl.oldnovel-site.net/pack/2019.zip</div>
+              </div>
+              <span class="badge">HTTP 404</span>
+            </div>
+            <div class="clean-item">
+              <input type="checkbox">
+              <div class="info">
+                <div class="tt" data-i18n="d3t">海外漫画镜像站</div>
+                <div class="uu">https://manga-mirror.example.org/series/one-piece</div>
+              </div>
+              <span class="badge">ERR_CONNECTION_REFUSED</span>
+            </div>
+            <div class="group-head" style="border-top:1px solid #f0f0f5;">
+              <span class="dot d-timeout"></span>
+              <span class="g-title" data-i18n="grpTimeout">加载超时</span>
+              <span class="g-count">3</span>
+            </div>
+            <div class="clean-item">
+              <input type="checkbox">
+              <div class="info">
+                <div class="tt" data-i18n="d4t">个人博客 · 连载随笔</div>
+                <div class="uu">https://slow-blog.example.com/essays</div>
+              </div>
+              <span class="badge warn" data-i18n="bTimeout">超时 30s</span>
+            </div>
+            <div class="clean-footer">
+              <span data-i18n="selAll">☑ 全选本页</span>
+              <button class="btn danger" data-i18n="del">删除所选（2）</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="promo.js"></script>
+  <script>
+    applyPromoI18n({
+      zh: {
+        headline: '书签清理，一步到位',
+        tagline: '死链 · 超时 · 重复 · 空文件夹，分类呈现',
+        b1: '基于真实页面访问结果判定死链，比纯 HTTP 探测更准确',
+        b2: '每条结果可点击打开，先亲自确认再决定删除',
+        b3: '勾选后一键批量删除，随时全选 / 取消',
+        cleanupTitle: '书签清理',
+        cleanupSub: '勾选需要删除的书签，确认后批量删除',
+        sDead: '死链',
+        sTimeout: '加载超时',
+        sDup: '重复书签',
+        sEmpty: '空文件夹',
+        grpDead: '死链',
+        grpTimeout: '加载超时',
+        d1t: '旧版论坛存档',
+        d2t: '小说合集 TXT 下载',
+        d3t: '海外漫画镜像站',
+        d4t: '个人博客 · 连载随笔',
+        bTimeout: '超时 30s',
+        selAll: '☑ 全选本页',
+        del: '删除所选（2）',
+      },
+      en: {
+        headline: 'Clean Up Bookmarks, the Smart Way',
+        tagline: 'Dead links · Timeouts · Duplicates · Empty folders',
+        b1: 'Dead links judged from real page visits — more accurate than plain HTTP checks',
+        b2: 'Every item is clickable — verify it yourself before deleting',
+        b3: 'Check the boxes and delete in bulk, with select-all / deselect',
+        cleanupTitle: 'Bookmark Cleanup',
+        cleanupSub: 'Check the bookmarks to remove, then delete in bulk',
+        sDead: 'Dead Links',
+        sTimeout: 'Timeouts',
+        sDup: 'Duplicates',
+        sEmpty: 'Empty Folders',
+        grpDead: 'Dead Links',
+        grpTimeout: 'Load Timeouts',
+        d1t: 'Old Forum Archive',
+        d2t: 'Novel Collection TXT Download',
+        d3t: 'Overseas Manga Mirror',
+        d4t: 'Personal Blog · Serialized Essays',
+        bTimeout: 'Timeout 30s',
+        selAll: '☑ Select all',
+        del: 'Delete Selected (2)',
+      },
+    });
+  </script>
+</body>
+</html>

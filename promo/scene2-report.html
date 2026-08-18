@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Bookmark Radar · Scene 2</title>
+  <link rel="stylesheet" href="promo.css">
+</head>
+<body>
+  <div class="canvas">
+    <!-- 左侧文案 -->
+    <div class="pitch">
+      <div class="brand">
+        <img src="../icons/icon128.png" alt="Bookmark Radar">
+        <span class="name">Bookmark Radar</span>
+      </div>
+      <h1 data-i18n="headline">追更动态，一目了然</h1>
+      <p class="tagline" data-i18n="tagline">自动识别目录页 · 智能提取最新章节</p>
+      <ul>
+        <li data-i18n="b1">中 / 英 / 日文章节模式全覆盖，自动判断排序方向</li>
+        <li data-i18n="b2">结果按状态分组：成功 / 错误 / 超时 / 人机验证</li>
+        <li data-i18n="b3">一键复制文本报告，或导出 JSON 数据</li>
+      </ul>
+    </div>
+
+    <!-- 右侧窗口模拟 -->
+    <div class="shot">
+      <div class="window">
+        <div class="window-bar">
+          <span class="dot dot-r"></span>
+          <span class="dot dot-y"></span>
+          <span class="dot dot-g"></span>
+          <span class="addr">chrome-extension://bookmark-radar/report/report.html</span>
+        </div>
+        <div class="window-body">
+          <div class="mock-header">
+            <div>
+              <h2 data-i18n="reportTitle">Bookmark Radar · 完整报告</h2>
+              <div class="sub" data-i18n="reportMeta">扫描时间：2026-08-18 20:30 · 共 670 个书签</div>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn ghost" data-i18n="copy">复制文本</button>
+              <button class="btn ghost" data-i18n="export">导出 JSON</button>
+            </div>
+          </div>
+
+          <div class="stat-row">
+            <div class="stat c-total"><span class="num">670</span><span class="lbl" data-i18n="sTotal">总计</span></div>
+            <div class="stat c-dir"><span class="num">12</span><span class="lbl" data-i18n="sDir">已提取章节</span></div>
+            <div class="stat c-ok"><span class="num">601</span><span class="lbl" data-i18n="sNonDir">非目录页</span></div>
+            <div class="stat c-net"><span class="num">38</span><span class="lbl" data-i18n="sNet">网络异常</span></div>
+            <div class="stat c-cf"><span class="num">7</span><span class="lbl" data-i18n="sCf">人机验证</span></div>
+            <div class="stat c-fail"><span class="num">12</span><span class="lbl" data-i18n="sOther">其他失败</span></div>
+          </div>
+
+          <div class="mock-card" style="margin-bottom:0;">
+            <div class="mock-tabs">
+              <span class="active" data-i18n="tabReport">扫描报告</span>
+              <span data-i18n="tabCleanup">书签清理</span>
+            </div>
+            <div class="group-head">
+              <span class="dot d-success"></span>
+              <span class="g-title" data-i18n="grpDir">成功 · 已提取章节</span>
+              <span class="g-count">12</span>
+            </div>
+            <table class="mock-table">
+              <thead>
+                <tr>
+                  <th data-i18n="thBk">书签名</th>
+                  <th data-i18n="thTitle">页面标题</th>
+                  <th data-i18n="thCh">最后一话</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="bk" data-i18n="r1bk">诡秘之主 · 目录</td>
+                  <td class="pg" data-i18n="r1pg">诡秘之主最新章节_笔趣阁</td>
+                  <td class="ch" data-i18n="r1ch">第一千四百三十二章 新的旅程（大结局）</td>
+                </tr>
+                <tr>
+                  <td class="bk" data-i18n="r2bk">咒术回战 · 汉化</td>
+                  <td class="pg" data-i18n="r2pg">Jujutsu Kaisen - Manga Index</td>
+                  <td class="ch">Chapter 271 (END)</td>
+                </tr>
+                <tr>
+                  <td class="bk" data-i18n="r3bk">凡人修仙传 · 章节目录</td>
+                  <td class="pg" data-i18n="r3pg">凡人修仙传 - 起点中文网</td>
+                  <td class="ch" data-i18n="r3ch">第两千四百四十六章 飞升</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="promo.js"></script>
+  <script>
+    applyPromoI18n({
+      zh: {
+        headline: '追更动态，一目了然',
+        tagline: '自动识别目录页 · 智能提取最新章节',
+        b1: '中 / 英 / 日文章节模式全覆盖，自动判断排序方向',
+        b2: '结果按状态分组：成功 / 错误 / 超时 / 人机验证',
+        b3: '一键复制文本报告，或导出 JSON 数据',
+        reportTitle: 'Bookmark Radar · 完整报告',
+        reportMeta: '扫描时间：2026-08-18 20:30 · 共 670 个书签',
+        copy: '复制文本',
+        export: '导出 JSON',
+        sTotal: '总计',
+        sDir: '已提取章节',
+        sNonDir: '非目录页',
+        sNet: '网络异常',
+        sCf: '人机验证',
+        sOther: '其他失败',
+        tabReport: '扫描报告',
+        tabCleanup: '书签清理',
+        grpDir: '成功 · 已提取章节',
+        thBk: '书签名',
+        thTitle: '页面标题',
+        thCh: '最后一话',
+        r1bk: '诡秘之主 · 目录',
+        r1pg: '诡秘之主最新章节_笔趣阁',
+        r1ch: '第一千四百三十二章 新的旅程（大结局）',
+        r2bk: '咒术回战 · 汉化',
+        r2pg: 'Jujutsu Kaisen - Manga Index',
+        r3bk: '凡人修仙传 · 章节目录',
+        r3pg: '凡人修仙传 - 起点中文网',
+        r3ch: '第两千四百四十六章 飞升',
+      },
+      en: {
+        headline: 'Track Every Update at a Glance',
+        tagline: 'Auto-detect chapter index pages · Extract the latest chapter',
+        b1: 'Recognizes chapter patterns in CN / EN / JP, detects sort order',
+        b2: 'Results grouped by status: success / error / timeout / challenge',
+        b3: 'Copy the text report or export raw JSON in one click',
+        reportTitle: 'Bookmark Radar · Full Report',
+        reportMeta: 'Scanned: 2026-08-18 20:30 · 670 bookmarks',
+        copy: 'Copy Text',
+        export: 'Export JSON',
+        sTotal: 'Total',
+        sDir: 'Chapters',
+        sNonDir: 'Non-index',
+        sNet: 'Network',
+        sCf: 'Challenge',
+        sOther: 'Other',
+        tabReport: 'Scan Report',
+        tabCleanup: 'Bookmark Cleanup',
+        grpDir: 'Success · Extracted Chapters',
+        thBk: 'Bookmark',
+        thTitle: 'Page Title',
+        thCh: 'Last Chapter',
+        r1bk: 'Lord of the Mysteries · Index',
+        r1pg: 'Lord of the Mysteries - Latest Chapters',
+        r1ch: 'Chapter 1432: A New Journey (Finale)',
+        r2bk: 'Jujutsu Kaisen · Fan Translation',
+        r2pg: 'Jujutsu Kaisen - Manga Index',
+        r3bk: 'A Mortal\'s Journey to Immortality',
+        r3pg: 'A Record of a Mortal\'s Journey - Index',
+        r3ch: 'Chapter 2446: Ascension',
+      },
+    });
+  </script>
+</body>
+</html>
