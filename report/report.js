@@ -110,25 +110,37 @@ refreshBtn.addEventListener('click', load);
 // --- 勾选重扫：忽略缓存重新扫描勾选的书签 ---
 
 // 勾选变化时更新按钮文案/状态（事件委托，重渲染后依然有效）
+// 注：此监听注册在下方 click 监听之前，Shift 区间勾选触发的原生切换 change 会先被这里吞掉
+let suppressNativeToggle = false;
 document.addEventListener('change', (e) => {
+  if (suppressNativeToggle) {
+    suppressNativeToggle = false;
+    return;
+  }
   if (e.target.classList.contains('rescan-check')) updateRescanBtn();
 });
 
 // Shift + 点击：区间勾选（从上一次点击的复选框到当前，状态跟随锚点）
+// 注意：Chromium 对 Shift+点击 checkbox 会在 JS 处理后强制执行一次原生切换，
+// preventDefault 也无法取消（已实测），因此需在切换完成后回写被点击框的状态
 let lastCheckIndex = -1;
 document.addEventListener('click', (e) => {
-  const cb = e.target.closest('.rescan-check');
+  const cb = e.target instanceof Element ? e.target.closest('.rescan-check') : null;
   if (!cb) return;
   const boxes = Array.from(document.querySelectorAll('.rescan-check'));
   const idx = boxes.indexOf(cb);
 
   if (e.shiftKey) {
-    e.preventDefault(); // 阻止单次切换与文本选中
+    e.preventDefault(); // 阻止文本选中
+    suppressNativeToggle = true; // 忽略紧随其后由原生切换触发的 change，避免计数抖动
     const anchor = lastCheckIndex >= 0 && lastCheckIndex < boxes.length ? lastCheckIndex : idx;
     const [a, b] = anchor <= idx ? [anchor, idx] : [idx, anchor];
     const state = boxes[anchor].checked; // 区间状态跟随锚点（锚点未勾则区间取消勾选）
     for (let i = a; i <= b; i++) boxes[i].checked = state;
-    updateRescanBtn();
+    setTimeout(() => {
+      cb.checked = state; // 原生切换发生在 JS 逻辑之后，回写修正被点击框
+      updateRescanBtn();
+    }, 0);
   }
   lastCheckIndex = idx;
 });
