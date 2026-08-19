@@ -7,6 +7,17 @@
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * 构造真实浏览器 UA。SW 默认 UA 含 ServiceWorker 字样、且缺少 Chrome 版本号
+ * 特征，会被 CDN 反爬（如腾讯 EdgeOne 返回 567）直接拦截，
+ * 导致 http 跳转预解析拿不到 301 Location、静态抓取被拒
+ */
+function browserLikeUserAgent() {
+  const ua = navigator.userAgent;
+  if (/Chrome\/\d/.test(ua)) return ua.replace(/ServiceWorker/g, '');
+  return 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+}
+
+/**
  * 导航到目标 URL 并等待该次导航的页面加载完成。
  *
  * 复用标签页时，上一页的 `complete` 事件可能会在下一次 `tabs.update()` 后才
@@ -17,13 +28,21 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
  * 除标签 status=complete 外，还会轮询 document.readyState：
  * 部分页面因广告/统计脚本挂起导致 load 永不触发（标签一直 loading），
  * 但 DOM 已解析完毕（readyState=interactive），此时内容已可提取，不应判为超时
+ *
+ * URL 匹配采用宽松规则：导航可能在途中被 301 改写到不同 host/path
+ * （如 http://x.blog.51cto.com/… → https://blog.51cto.com/x/…），
+ * 精确匹配会漏掉这类事件导致 complete/readyState 信号全被门控拒绝、
+ * 最终误判为加载超时。只要观察到「离开了原页面」即视为本次导航的一部分
  * @param {string} expectedUrl - 本次导航请求的目标 URL
  */
 function navigateAndWaitForTabComplete(tabId, expectedUrl, timeoutMs = 30000) {
-  return new Promise((resolve) => {
+  // async executor：导航发起前需先 await 读取标签当前 URL 作为宽松匹配基准
+  return new Promise(async (resolve) => {
     let resolved = false;
 
     // 忽略 hash 差异：Chrome 有时会在导航过程中省略或单独处理 fragment。
+    // 同时接受同 host 的路径变体（末尾斜杠/查询串差异）：站点常见的规范化
+    // 重定向不应切断本次导航的完成信号
     const isExpectedUrl = (url) => {
       if (!url) return false;
       try {
@@ -31,10 +50,25 @@ function navigateAndWaitForTabComplete(tabId, expectedUrl, timeoutMs = 30000) {
         const expected = new URL(expectedUrl);
         actual.hash = '';
         expected.hash = '';
-        return actual.href === expected.href;
+        if (actual.href === expected.href) return true;
+        return actual.origin === expected.origin
+          && actual.pathname.replace(/\/$/, '') === expected.pathname.replace(/\/$/, '');
       } catch (e) {
         return url === expectedUrl;
       }
+    };
+
+    // 宽松匹配：URL 与期望不同源也不同路径，但已离开导航发起前的原页面
+    // （about:blank 或上一份文档）。用于接收 301 改写到其他 host 后的
+    // complete/readyState 信号（如 51cto 子域 http → blog.51cto.com）
+    let startUrl = '';
+    try { startUrl = (await chrome.tabs.get(tabId)).url || ''; } catch (e) { /* 保持空 */ }
+    const isPartOfThisNavigation = (url) => {
+      if (!url || isExpectedUrl(url)) return true;
+      try {
+        if (startUrl && new URL(url).href === new URL(startUrl).href) return false;
+      } catch (e) { /* startUrl 无法解析时按宽松处理 */ }
+      return /^https?:/.test(url);
     };
 
     let sawTargetUrl = false;
@@ -43,8 +77,9 @@ function navigateAndWaitForTabComplete(tabId, expectedUrl, timeoutMs = 30000) {
     const listener = async (updatedTabId, changeInfo) => {
       if (updatedTabId !== tabId) return;
 
-      // 看到目标 URL 表明后续即使跳转到其他地址，仍属于本次导航。
-      if (changeInfo.url && isExpectedUrl(changeInfo.url)) {
+      // 看到目标 URL 表明后续即使跳转到其他地址，仍属于本次导航；
+      // 途中被 301 改写（URL 与期望不同但已离开原页面）同样算。
+      if (changeInfo.url && isPartOfThisNavigation(changeInfo.url)) {
         sawTargetUrl = true;
         targetDocumentStarted = true;
       }
@@ -52,7 +87,7 @@ function navigateAndWaitForTabComplete(tabId, expectedUrl, timeoutMs = 30000) {
       if (changeInfo.status === 'loading') {
         try {
           const tab = await chrome.tabs.get(tabId);
-          if (isExpectedUrl(tab.url) || isExpectedUrl(tab.pendingUrl)) {
+          if (isPartOfThisNavigation(tab.url) || isPartOfThisNavigation(tab.pendingUrl)) {
             sawTargetUrl = true;
             targetDocumentStarted = true;
           }
@@ -75,18 +110,22 @@ function navigateAndWaitForTabComplete(tabId, expectedUrl, timeoutMs = 30000) {
       clearTimeout(timer);
     };
 
-    // 轮询 readyState：导航未提交/跨源重定向中注入会失败，忽略继续
+    // 轮询 readyState：导航未提交/跨源重定向中注入会失败，忽略继续。
+    // 返回 {readyState, url}：301 改写后 tab.url 与期望不同，
+    // 仍需用宽松规则确认轮询到的是本次导航的文档而非上一页
     const readyStatePoller = setInterval(async () => {
       try {
         // 新导航尚未提交时，不能对上一份文档的 readyState 做出反应。
         if (!targetDocumentStarted) return;
         const tab = await chrome.tabs.get(tabId);
-        if (!/^https?:/.test(tab.url)) return;
+        if (!isPartOfThisNavigation(tab.url)) return;
         const [res] = await chrome.scripting.executeScript({
           target: { tabId },
-          func: () => document.readyState,
+          func: () => ({ readyState: document.readyState, url: location.href }),
         });
-        if (res && (res.result === 'interactive' || res.result === 'complete')) {
+        if (res && res.result
+          && (res.result.readyState === 'interactive' || res.result.readyState === 'complete')
+          && isPartOfThisNavigation(res.result.url)) {
           cleanup();
           resolve(true);
         }
@@ -141,30 +180,72 @@ async function activateTabForChallenge(tabId) {
 }
 
 /**
+ * http 地址跳转预解析：用 manual 单跳请求逐跳跟随重定向。
+ *
+ * 浏览器发起的 http 请求可能被 HTTPS-First/HSTS 自动升级为 https，
+ * 若原 host 的 https 证书无效（如 *.blog.51cto.com），整个请求链会在
+ * 第一跳就失败，拿不到后面的 301 目标；manual 单跳请求不跟随跳转、
+ * 不进入跨源 https 目标的证书校验，能稳定拿到 301/302 的 Location。
+ * 返回 { url: 最终目标, hops: 跳数, failed: 第一跳是否网络层失败 }
+ */
+async function resolveHttpRedirects(url) {
+  let current = url;
+  for (let hop = 0; hop < 5; hop++) {
+    // 仅对 http 地址用 manual 单跳：http→https 的跳转响应直接取 Location，
+    // 避免对 https 目标重复发起请求（也避免无谓的证书校验）
+    if (!/^http:/i.test(current)) break;
+    let resp;
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10000);
+      resp = await fetch(current, {
+        redirect: 'manual',
+        credentials: 'omit',
+        signal: controller.signal,
+        // UA 必须像真实浏览器：CDN 反爬（如腾讯 EdgeOne）会拦截非浏览器
+        // UA 返回 567，导致拿不到 301 的 Location
+        headers: { 'User-Agent': browserLikeUserAgent() },
+      });
+      clearTimeout(timer);
+    } catch (e) {
+      return { url: current, hops: hop, failed: true };
+    }
+    const location = resp.headers.get('location');
+    // manual 模式下跳转响应可能是 3xx，也可能是 opaqueredirect（status 0）
+    if (!location) return { url: current, hops: hop, failed: false };
+    try {
+      current = new URL(location, current).href;
+    } catch (e) {
+      return { url: current, hops: hop, failed: false };
+    }
+  }
+  return { url: current, hops: 5, failed: false };
+}
+
+/**
  * 后台抓取静态分析：http 书签的首选路径（不受 HTTPS 优先拦截页影响，且更快），
  * 也是 https 标签页路径不可用（注入失败/超时）时的回退。
  * 直接在 SW 里 fetch HTML 并用 DOMParser 分析；静态分析不执行 JS，
  * 对服务端渲染的页面有效，JS 渲染的列表识别不出（调用方会视情况用标签页复核）
  */
 async function fetchAndAnalyze(bookmark) {
+  // http 地址先解析跳转终点，直接分析最终目标（规避浏览器协议升级
+  // 在第一跳失败导致整链不可用，如 51cto 博客 http→https://blog.51cto.com）
+  const targetUrl = /^http:/i.test(bookmark.url)
+    ? (await resolveHttpRedirects(bookmark.url)).url
+    : bookmark.url;
+
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), Math.min(loadTimeoutMs, 30000));
-    const resp = await fetch(bookmark.url, {
+    const resp = await fetch(targetUrl, {
       redirect: 'follow',
       credentials: 'omit',
       signal: controller.signal,
-      // SW 默认 UA 含 ServiceWorker 字样，会被部分站点的反爬直接拒绝（如 51cto 返回 567）
-      headers: { 'User-Agent': navigator.userAgent.replace(/ServiceWorker/g, '') },
+      // SW 默认 UA 会被部分站点的反爬直接拒绝（如 51cto/EdgeOne 返回 567）
+      headers: { 'User-Agent': browserLikeUserAgent() },
     });
     clearTimeout(timer);
-
-    if (!resp.ok) {
-      if (resp.status === 404) return { status: 'not_found', message: t('err404') };
-      if (resp.status === 403) return { status: 'access_denied', message: t('err403') };
-      if (resp.status >= 500) return { status: 'server_error', message: t('errServerGeneric', [String(resp.status)]) };
-      return { status: 'access_denied', message: t('errAccessGeneric', [String(resp.status)]) };
-    }
 
     const buf = await resp.arrayBuffer();
     // 先用 latin1 无损解码嗅探 charset，再按真实 charset 重新解码（老 http 站点常用 gbk 等）
@@ -181,13 +262,25 @@ async function fetchAndAnalyze(bookmark) {
       }
     }
 
+    // 非 200 响应：先检测响应体是否为验证页（如 51cto 的 567 + TEO），
+    // 再按状态码分类，避免把反爬质询误报为「访问被拒」
+    if (!resp.ok) {
+      if (isChallengeDoc({ title: '', bodyText: raw.slice(0, 500), htmlSnippet: raw.slice(0, 1500) })) {
+        return { status: 'cf_challenge', message: t('cfMessage'), targetUrl };
+      }
+      if (resp.status === 404) return { status: 'not_found', message: t('err404'), targetUrl };
+      if (resp.status === 403) return { status: 'access_denied', message: t('err403'), targetUrl };
+      if (resp.status >= 500) return { status: 'server_error', message: t('errServerGeneric', [String(resp.status)]), targetUrl };
+      return { status: 'access_denied', message: t('errAccessGeneric', [String(resp.status)]), targetUrl };
+    }
+
     const parsed = new DOMParser().parseFromString(html, 'text/html');
     // 补 base 让相对链接按原地址解析，保证同页锚点判断正确
     const base = parsed.createElement('base');
-    base.href = bookmark.url;
+    base.href = targetUrl;
     (parsed.head || parsed.documentElement).appendChild(base);
 
-    const analyzed = analyzeBookmarkDocument(parsed, bookmark.url, t);
+    const analyzed = analyzeBookmarkDocument(parsed, targetUrl, t);
     return {
       pageTitle: analyzed.title,
       isDirectory: analyzed.isDirectory,
@@ -196,9 +289,11 @@ async function fetchAndAnalyze(bookmark) {
       message: `${analyzed.message}${t('staticFetchSuffix')}`,
       // 静态分析不执行 JS，非目录结论可能不准，不缓存避免污染 30 天
       noCache: !analyzed.isDirectory,
+      // 实际分析所用的地址（http 跳转终点），供标签复核直接导航
+      targetUrl,
     };
   } catch (e) {
-    console.warn('[Bookmark Radar] 后台抓取回退失败:', bookmark.url, e.message);
+    console.warn('[Bookmark Radar] 后台抓取回退失败:', targetUrl, e.message);
     // 网络层失败不吞掉：转成具体诊断。
     // fetchFailed 标记区分「拿到 HTTP 响应的结论」与「纯网络层失败」，
     // 后者仅在标签页确实落在错误页时才可定论（避免误伤注入失败但网络可达的页面）
@@ -207,7 +302,7 @@ async function fetchAndAnalyze(bookmark) {
     }
     // 优先用标签页导航侧捕获的具体 net 错误码（由调用方传入的 message 覆盖），
     // 拿不到才用 fetch 的含糊报错
-    return { status: 'network_error', fetchFailed: true, message: `${t('netErrorPrefix')}${t('staticFetchSuffix')}：${e.message || 'Failed to fetch'}` };
+    return { status: 'network_error', fetchFailed: true, message: `${t('netErrorPrefix')}${t('staticFetchSuffix')}：${e.message || 'Failed to fetch'}`, targetUrl };
   }
 }
 
@@ -290,6 +385,14 @@ async function checkUrlPipeline(bookmark, target, tabId) {
     if (staticResult && staticResult.isDirectory) return done(staticResult);
   }
 
+  // 标签导航优先用静态阶段解析出的跳转终点（如 http→https://blog.51cto.com）：
+  // 直接导航原 http 地址可能被浏览器协议升级拦截（证书无效 host 的
+  // HTTPS-First 拦截页），永远到不了真实页面
+  let navTarget = target;
+  if (staticResult && staticResult.targetUrl && staticResult.targetUrl !== target) {
+    navTarget = staticResult.targetUrl;
+  }
+
   // 监听工作标签页导航的网络层错误：webNavigation.onErrorOccurred 会报告
   // 具体 net 错误码（DNS/连接/SSL）。webRequest 不会为扩展自身的 fetch 触发，
   // 只能从标签页导航侧捕获
@@ -329,7 +432,7 @@ async function checkUrlPipeline(bookmark, target, tabId) {
 
   try {
     // 导航并等待本次导航对应的文档完成，避免读取复用标签页中的上一页。
-    const loaded = await navigateAndWaitForTabComplete(tabId, target, loadTimeoutMs);
+    const loaded = await navigateAndWaitForTabComplete(tabId, navTarget, loadTimeoutMs);
 
     if (!loaded) {
       // 导航侧捕获到 net 错误时归为网络错误（带具体错误码），否则才是真超时
