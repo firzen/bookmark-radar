@@ -414,15 +414,25 @@ async function checkUrlPipeline(bookmark, target, tabId) {
 
   // 兜底决策表（扁平）：
   // - 标签页路径不可用时复用已有 staticResult，避免重复抓取
-  // - 拿到 HTTP 响应的结论可信，直接采用
   // - 纯网络层失败（fetchFailed）仅在标签页确实落在浏览器错误页时定论，
   //   否则返回 null 由调用方保留原错误
+  // - HTTP 错误响应（403/5xx 等）同样不可直接定论：站点反爬可能拒绝
+  //   ServiceWorker 的 fetch（返回 403）但放行真实浏览器，只有标签页也
+  //   确认落在错误页时才采用该结论，否则交还标签页侧的结论（如超时）
   // 注：无 tabs 权限且 <all_urls> 不覆盖 chrome-error:// 时 tab.url 读不到，
   // 调用方可通过注入异常文案（showing error page）传入判定结果
   const tryFetchFallback = async (tabShowsErrorPage = false) => {
     if (!staticResult) staticResult = await fetchAndAnalyze({ ...bookmark, url: target });
     if (!staticResult) return null;
-    if (!staticResult.fetchFailed) return done(staticResult);
+    if (!staticResult.fetchFailed) {
+      // 静态抓取拿到了 HTTP 错误响应（如 403/5xx）：
+      // 站点反爬可能仅拒绝 ServiceWorker 的 fetch 而放行真实浏览器，
+      // 只有标签页也确认落在错误页时才采用该结论
+      if (tabShowsErrorPage || (await isTabOnErrorPage(tabId))) {
+        return done(navDiag() || staticResult);
+      }
+      return null; // 标签页未确认错误页，不定论为 HTTP 错误
+    }
     if (tabShowsErrorPage || (await isTabOnErrorPage(tabId))) {
       // 优先用导航侧捕获的具体 net 错误码，拿不到才用 fetch 的含糊报错
       return done(navDiag() || staticResult);
@@ -484,7 +494,65 @@ async function checkUrlPipeline(bookmark, target, tabId) {
       return (await tryFetchFallback()) || done({ status: 'parse_error', message: t('parseErrorMsg') });
     }
 
-    const final = await resolveChallenge(tabId, extracted);
+    let final = await resolveChallenge(tabId, extracted);
+
+    // 反爬误判兜底重试：
+    // 当提取器报告错误（如 403）且静态抓取也是非 200 时，说明站点反爬同时
+    // 拒绝了 ServiceWorker fetch 和标签页导航。若导航目标被 resolveHttpRedirects
+    // 改写（http→https），用原始书签 URL 重新导航——浏览器自行处理协议升级与
+    // 重定向的行为可能与预解析后直接导航 HTTPS 不同，有机会绕过反爬
+    if (final.status !== 'success' && final.status !== 'cf_challenge'
+      && staticResult && !staticResult.fetchFailed
+      && navTarget !== target) {
+      const retryLoaded = await navigateAndWaitForTabComplete(tabId, target, loadTimeoutMs);
+      if (retryLoaded) {
+        await delay(800);
+        try {
+          const retryResults = await injectExtractor(tabId);
+          const retryExtracted = retryResults && retryResults[0] && retryResults[0].result;
+          if (retryExtracted) {
+            final = await resolveChallenge(tabId, retryExtracted);
+          }
+        } catch (e) {
+          // 重试注入失败，保留第一次结论
+        }
+      }
+    }
+
+    // 反爬误判最终守卫：
+    // 静态 fetch 和标签页都拿到 HTTP 错误（如 403），且标签页内容很少
+    // （典型反爬页特征：bodyText < 2000 且 linkCount < 10），
+    // 说明站点反爬同时拒绝了两种路径。此时无法区分「真的不可访问」和
+    // 「反爬误判」，返回 error 而非确认 access_denied/not_found 等具体结论，
+    // 避免将用户能正常打开的页面误报为死链
+    if (final.status !== 'success' && final.status !== 'cf_challenge'
+      && final.status !== 'network_error' && final.status !== 'timeout'
+      && staticResult && !staticResult.fetchFailed) {
+      // 通过注入检查当前标签页页面大小：反爬页通常内容极少
+      let tabPageSmall = false;
+      try {
+        const [sizeCheck] = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: () => ({
+            textLen: (document.body ? document.body.innerText : '').length,
+            linkCount: document.querySelectorAll('a[href]').length,
+          }),
+        });
+        if (sizeCheck && sizeCheck.result) {
+          tabPageSmall = sizeCheck.result.textLen < 2000 && sizeCheck.result.linkCount < 10;
+        }
+      } catch (e) { /* 注入失败时不触发守卫 */ }
+
+      if (tabPageSmall) {
+        return done({
+          pageTitle: final.pageTitle,
+          isDirectory: false,
+          lastChapter: null,
+          status: 'error',
+          message: t('unknownError'),
+        });
+      }
+    }
 
     return done({
       pageTitle: final.title,

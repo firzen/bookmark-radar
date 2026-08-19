@@ -57,6 +57,7 @@ chrome.runtime.onMessage.addListener((message) => {
   if (message.type === 'scanProgress') {
     rescanning = true;
     showProgress(message.progress, message.total, message.currentBookmark);
+    updateRescanBtn(); // 扫描进行中立即禁用重扫/删除按钮
   } else if (message.type === 'scanComplete') {
     rescanning = false;
     hideProgress();

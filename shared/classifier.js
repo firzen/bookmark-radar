@@ -65,10 +65,10 @@ function isChallengeTitle(pageTitle) {
 }
 
 /**
- * 页面错误特征：Chrome 内部错误页与常见 HTTP 错误页的文本签名。
- * 文案走 i18n，由调用方传入翻译函数渲染 message
+ * Chrome 内部错误页特征：ERR_* 模式只出现在 Chrome 自身的错误页中，
+ * 正常网页的正文/HTML 不会包含这些字符串，全文匹配始终可靠
  */
-const PAGE_ERROR_SIGNATURES = [
+const CHROME_ERROR_SIGNATURES = [
   { pattern: /ERR_NAME_NOT_RESOLVED/, status: 'network_error', key: 'errDns' },
   { pattern: /ERR_CONNECTION_REFUSED/, status: 'network_error', key: 'errConnRefused' },
   { pattern: /ERR_CONNECTION_TIMED_OUT/, status: 'timeout', key: 'errConnTimeout' },
@@ -76,6 +76,13 @@ const PAGE_ERROR_SIGNATURES = [
   { pattern: /ERR_INTERNET_DISCONNECTED/, status: 'network_error', key: 'errOffline' },
   { pattern: /ERR_SSL_PROTOCOL_ERROR/, status: 'network_error', key: 'errSsl' },
   { pattern: /ERR_CERT_/i, status: 'network_error', key: 'errCert' },
+];
+
+/**
+ * HTTP 错误页特征：403/404/5xx 等文本可能出现在正常文章中
+ * （代码示例、错误说明等），必须配合小页面门控才判定
+ */
+const HTTP_ERROR_SIGNATURES = [
   { pattern: /403 Forbidden/i, status: 'access_denied', key: 'err403' },
   { pattern: /Access Denied/i, status: 'access_denied', key: 'err403' },
   { pattern: /404 Not Found/i, status: 'not_found', key: 'err404' },
@@ -93,15 +100,27 @@ const PAGE_ERROR_SIGNATURES = [
  * @returns {{status: string, message: string}|null}
  */
 function detectErrorPage(info, tfn) {
-  // 全文 HTML 匹配仅限内容极少且几乎无链接的页面（典型错误页）；
-  // 避免正常页面的脚本/文案中提及错误字符串时被误判
-  const smallPage = info.bodyText.length < 2000 && info.linkCount < 10;
-  for (const sig of PAGE_ERROR_SIGNATURES) {
+  // Chrome 内部错误页（ERR_*）：只出现在 chrome-error:// 页面，
+  // 正常网页不会包含这些字符串，全文匹配始终可靠
+  for (const sig of CHROME_ERROR_SIGNATURES) {
     if (sig.pattern.test(info.bodyText)
-      || (smallPage && sig.pattern.test(info.outerHtml))) {
+      || sig.pattern.test(info.outerHtml)) {
       return { status: sig.status, message: tfn(sig.key) };
     }
   }
+
+  // HTTP 错误页（403/404/5xx 等）：正常文章可能提及「403 Forbidden」
+  // （代码示例、安全说明等），必须限制为内容极少且几乎无链接的典型错误页
+  const smallPage = info.bodyText.length < 2000 && info.linkCount < 10;
+  if (smallPage) {
+    for (const sig of HTTP_ERROR_SIGNATURES) {
+      if (sig.pattern.test(info.bodyText)
+        || sig.pattern.test(info.outerHtml)) {
+        return { status: sig.status, message: tfn(sig.key) };
+      }
+    }
+  }
+
   return null;
 }
 
