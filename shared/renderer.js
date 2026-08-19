@@ -25,8 +25,9 @@ function renderReport(data, options) {
   // 渲染摘要
   renderSummary(data.summary);
 
-  // 按状态分组
+  // 按状态分组，并并入清理项（重复副本/空文件夹作为附加分组）
   const groups = groupResults(data.results);
+  appendCleanupGroups(groups, data.cleanup);
 
   // 渲染分组
   const groupContainer = el('groupContainer');
@@ -34,10 +35,42 @@ function renderReport(data, options) {
   for (const group of groups) {
     groupContainer.appendChild(createGroupElement(group, selectable));
   }
+}
 
-  // 渲染清理标签
-  if (data.cleanup) {
-    renderCleanup(data.cleanup);
+/**
+ * 清理项并入分组视图：重复副本（每组保留第一份）与空文件夹
+ * 渲染为附加分组，复用同一套勾选框，由顶栏「删除选中」统一删除
+ */
+function appendCleanupGroups(groups, cleanup) {
+  if (!cleanup) return;
+
+  const dupItems = [];
+  for (const group of cleanup.duplicates || []) {
+    for (let i = 1; i < group.length; i++) {
+      dupItems.push({
+        bookmarkId: group[i].id,
+        bookmarkName: group[i].title,
+        url: group[i].url,
+        pageTitle: '',
+        lastChapter: null,
+        message: t('dupCopies', [String(group.length)]),
+      });
+    }
+  }
+  if (dupItems.length > 0) {
+    groups.push({ key: 'duplicates', title: t('cleanDup'), dotClass: 'dot-access', items: dupItems });
+  }
+
+  const emptyItems = (cleanup.emptyFolders || []).map((f) => ({
+    bookmarkId: f.id,
+    bookmarkName: f.title,
+    url: '',
+    pageTitle: '',
+    lastChapter: null,
+    message: t('cleanEmpty'),
+  }));
+  if (emptyItems.length > 0) {
+    groups.push({ key: 'emptyFolders', title: t('cleanEmpty'), dotClass: 'dot-access', items: emptyItems });
   }
 }
 
@@ -112,7 +145,7 @@ function createGroupElement(group, selectable) {
   table.innerHTML = `
     <thead>
       <tr>
-        ${selectable ? '<th class="cell-check"></th>' : ''}
+        ${selectable ? `<th class="cell-check" title="${t('tipShiftSelect')}"></th>` : ''}
         <th>${t('thBookmark')}</th>
         <th>${t('thPageTitle')}</th>
         <th>${t('thLastChapter')}</th>
@@ -123,12 +156,12 @@ function createGroupElement(group, selectable) {
         <tr>
           ${selectable ? `
           <td class="cell-check">
-            <input type="checkbox" class="rescan-check" data-url="${escapeHtml(item.url)}" title="${t('tipRescan')}">
+            <input type="checkbox" class="rescan-check" data-id="${escapeHtml(item.bookmarkId)}"${item.url ? ` data-url="${escapeHtml(item.url)}"` : ''}>
           </td>` : ''}
           <td class="cell-bookmark">
-            <a href="${escapeHtml(item.url)}" target="_blank" title="${escapeHtml(item.bookmarkName)}">
+            ${item.url ? `<a href="${escapeHtml(item.url)}" target="_blank" title="${escapeHtml(item.bookmarkName)}">
               ${escapeHtml(item.bookmarkName)}
-            </a>
+            </a>` : escapeHtml(item.bookmarkName)}
           </td>
           <td class="cell-title" title="${escapeHtml(item.pageTitle)}">
             ${escapeHtml(item.pageTitle) || '—'}
@@ -214,181 +247,3 @@ function generateTextReport(data) {
   return lines.join('\n');
 }
 
-// --- 书签清理 ---
-
-function renderCleanup(cleanup) {
-  const deadLinks = cleanup.deadLinks || [];
-  const timeouts = cleanup.timeouts || [];
-  const duplicates = cleanup.duplicates || [];
-  const emptyFolders = cleanup.emptyFolders || [];
-  const total = deadLinks.length + timeouts.length + duplicates.reduce((sum, g) => sum + g.length - 1, 0) + emptyFolders.length;
-
-  let html = `
-    <div class="cleanup-summary">
-      <div class="cleanup-stat dead">
-        <span class="num">${deadLinks.length}</span>
-        <span class="lbl">${t('cleanDead')}</span>
-      </div>
-      <div class="cleanup-stat timeout">
-        <span class="num">${timeouts.length}</span>
-        <span class="lbl">${t('cleanTimeout')}</span>
-      </div>
-      <div class="cleanup-stat dup">
-        <span class="num">${duplicates.length}</span>
-        <span class="lbl">${t('dupGroups')}</span>
-      </div>
-      <div class="cleanup-stat empty">
-        <span class="num">${emptyFolders.length}</span>
-        <span class="lbl">${t('cleanEmpty')}</span>
-      </div>
-    </div>
-  `;
-
-  if (total === 0) {
-    html += `<div class="cleanup-empty">${t('cleanEmptyState')}</div>`;
-  } else {
-    // 死链
-    if (deadLinks.length > 0) {
-      html += createCleanupSection('deadLinks', t('cleanDead'), deadLinks.map(item => ({
-        id: item.url + '|' + item.bookmarkName,
-        bookmarkId: findBookmarkId(deadLinks, item),
-        title: item.bookmarkName,
-        subtitle: `${item.message || t('unreachable')} · ${item.url}`,
-        url: item.url,
-      })));
-    }
-
-    // 加载超时
-    if (timeouts.length > 0) {
-      html += createCleanupSection('timeouts', t('cleanTimeout'), timeouts.map(item => ({
-        id: item.url + '|' + item.bookmarkName,
-        bookmarkId: findBookmarkId(timeouts, item),
-        title: item.bookmarkName,
-        subtitle: `${item.message || t('loadTimeoutMsg')} · ${item.url}`,
-        url: item.url,
-      })));
-    }
-
-    // 重复书签
-    if (duplicates.length > 0) {
-      const dupItems = [];
-      for (const group of duplicates) {
-        // 保留第一个，其余标记为可删除
-        for (let i = 1; i < group.length; i++) {
-          dupItems.push({
-            id: group[i].id,
-            bookmarkId: group[i].id,
-            title: group[i].title,
-            subtitle: `${t('dupCopies', [String(group.length)])} · ${group[i].url}`,
-            url: group[i].url,
-          });
-        }
-      }
-      html += createCleanupSection('duplicates', t('cleanDup'), dupItems);
-    }
-
-    // 空文件夹
-    if (emptyFolders.length > 0) {
-      html += createCleanupSection('emptyFolders', t('cleanEmpty'), emptyFolders.map(f => ({
-        id: f.id,
-        bookmarkId: f.id,
-        title: f.title,
-        subtitle: t('cleanEmpty'),
-      })));
-    }
-  }
-
-  el('cleanupContainer').innerHTML = html;
-
-  // 绑定事件
-  bindCleanupEvents();
-}
-
-function findBookmarkId(results, item) {
-  // 结果对象自带 bookmarkId，删除时直接传给 removeTree
-  return item.bookmarkId || item.url;
-}
-
-function createCleanupSection(key, title, items) {
-  return `
-    <div class="cleanup-section" data-key="${key}">
-      <div class="cleanup-header">
-        <span class="cleanup-title">${title}</span>
-        <span class="cleanup-count">${t('itemsCount', [String(items.length)])}</span>
-      </div>
-      <ul class="cleanup-list">
-        ${items.map(item => `
-          <li class="cleanup-item">
-            <input type="checkbox" data-id="${escapeHtml(item.bookmarkId)}" data-key="${key}">
-            <div class="item-info">
-              <div class="item-title">
-                ${item.url
-                  ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener" title="${t('openToConfirm')}">${escapeHtml(item.title)}</a>`
-                  : escapeHtml(item.title)}
-              </div>
-              <div class="item-url">${escapeHtml(item.subtitle)}</div>
-            </div>
-          </li>
-        `).join('')}
-      </ul>
-      <div class="cleanup-footer">
-        <label class="select-all">
-          <input type="checkbox" data-select-all="${key}"> ${t('selectAll')}
-        </label>
-        <button class="btn-danger" data-delete="${key}">${t('deleteSelected')}</button>
-      </div>
-    </div>
-  `;
-}
-
-function bindCleanupEvents() {
-  const cleanupContainer = el('cleanupContainer');
-
-  // 全选
-  cleanupContainer.querySelectorAll('[data-select-all]').forEach((cb) => {
-    cb.addEventListener('change', () => {
-      const key = cb.dataset.selectAll;
-      cleanupContainer.querySelectorAll(`input[data-key="${key}"]`).forEach((item) => {
-        item.checked = cb.checked;
-      });
-    });
-  });
-
-  // 删除按钮
-  cleanupContainer.querySelectorAll('[data-delete]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const key = btn.dataset.delete;
-      const checked = cleanupContainer.querySelectorAll(`input[data-key="${key}"]:checked`);
-      if (checked.length === 0) {
-        return;
-      }
-
-      const ids = Array.from(checked).map((cb) => cb.dataset.id);
-      const confirmed = confirm(t('confirmDelete', [String(ids.length)]));
-      if (!confirmed) return;
-
-      btn.disabled = true;
-      btn.textContent = t('deleting');
-
-      const result = await chrome.runtime.sendMessage({
-        action: 'deleteBookmarks',
-        ids,
-      });
-
-      if (result && result.success) {
-        // 从列表中移除对应项
-        checked.forEach((cb) => {
-          cb.closest('.cleanup-item').remove();
-        });
-        btn.textContent = t('deletedCount', [String(ids.length)]);
-        setTimeout(() => {
-          btn.textContent = t('deleteSelected');
-          btn.disabled = false;
-        }, 2000);
-      } else {
-        btn.textContent = t('deleteFailed');
-        btn.disabled = false;
-      }
-    });
-  });
-}

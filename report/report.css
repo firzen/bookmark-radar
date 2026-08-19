@@ -22,6 +22,15 @@ body {
   font-size: 20px;
 }
 
+/* 顶栏吸顶：页面滚动时保持可见可操作 */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
 .subtitle {
   font-size: 12px;
 }
@@ -34,4 +43,37 @@ body {
 
 .cell-title {
   max-width: 480px;
+}
+
+/* 删除确认弹层 */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.confirm-dialog {
+  width: 380px;
+  max-width: calc(100vw - 48px);
+  padding: 20px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+}
+
+.confirm-msg {
+  margin: 0 0 18px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #1f2937;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }

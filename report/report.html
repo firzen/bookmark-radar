@@ -24,7 +24,11 @@
       <label class="force-label" data-i18n-title="tipTimeout">
         <input type="number" id="rescanTimeout" min="5" max="300" value="30"> <span data-i18n="seconds">秒</span>
       </label>
+      <label class="force-label" data-i18n-title="tipHuman">
+        <input type="checkbox" id="rescanHumanVerify"> <span data-i18n="humanVerify">真人验证</span>
+      </label>
       <button id="rescanBtn" class="btn-ghost" data-i18n="rescanSelected" data-i18n-title="tipRescan" disabled>重扫选中</button>
+      <button id="deleteBtn" class="btn-danger" data-i18n="deleteSelected" data-i18n-title="tipDelete" disabled>删除选中</button>
       <button id="copyBtn" class="btn-ghost" data-i18n="copyText">复制文本</button>
       <button id="exportBtn" class="btn-ghost" data-i18n="exportJson">导出 JSON</button>
       <button id="refreshBtn" class="btn-ghost" data-i18n="refresh">刷新</button>
@@ -45,22 +49,9 @@
 
   <!-- 报告区域 -->
   <section id="reportSection" class="report-section hidden">
-    <!-- 标签页切换 -->
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="analysis" data-i18n="tabAnalysis">内容分析</button>
-      <button class="tab-btn" data-tab="cleanup" data-i18n="tabCleanup">书签清理</button>
-    </div>
-
-    <!-- 内容分析标签 -->
-    <div id="analysisTab" class="tab-content">
-      <div class="summary-bar" id="summaryBar"></div>
-      <div id="groupContainer"></div>
-    </div>
-
-    <!-- 书签清理标签 -->
-    <div id="cleanupTab" class="tab-content hidden">
-      <div id="cleanupContainer"></div>
-    </div>
+    <!-- 内容分析：摘要 + 状态分组（勾选可重扫/删除） -->
+    <div class="summary-bar" id="summaryBar"></div>
+    <div id="groupContainer"></div>
   </section>
 
   <!-- 空状态 -->
@@ -69,6 +60,17 @@
     <p data-i18n="noData">暂无报告数据</p>
     <p class="empty-hint" data-i18n="noDataHint">请点击插件图标 → 「开始扫描」，完成后此处会自动刷新</p>
   </section>
+
+  <!-- 删除确认弹层 -->
+  <div id="confirmOverlay" class="confirm-overlay hidden">
+    <div class="confirm-dialog">
+      <p class="confirm-msg" id="confirmMsg"></p>
+      <div class="confirm-actions">
+        <button id="confirmCancel" class="btn-ghost" data-i18n="cancel">取消</button>
+        <button id="confirmOk" class="btn-danger" data-i18n="deleteSelected">删除选中</button>
+      </div>
+    </div>
+  </div>
 
   <script src="../shared/i18n.js"></script>
   <script src="../shared/renderer.js"></script>
