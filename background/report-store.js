@@ -90,7 +90,7 @@ function buildReportData(results, opts) {
  */
 async function pruneScanResults(ids) {
   const idSet = new Set(ids);
-  const data = await chrome.storage.local.get(['scanResults', 'resultCache']);
+  const data = await chrome.storage.local.get(['scanResults', 'resultCache', 'directoryCache']);
   const scanResults = data.scanResults;
   if (!scanResults || !Array.isArray(scanResults.results)) return;
 
@@ -128,6 +128,20 @@ async function pruneScanResults(ids) {
     }
   }
   if (cacheChanged) updates.resultCache = resultCache;
+
+  // 同步清除目录缓存中已删书签的条目
+  const directoryCache = data.directoryCache || {};
+  let dirCacheChanged = false;
+  for (const r of removed) {
+    if (!r.url) continue;
+    for (const key of [cacheKey(r.url), r.url]) {
+      if (directoryCache[key]) {
+        delete directoryCache[key];
+        dirCacheChanged = true;
+      }
+    }
+  }
+  if (dirCacheChanged) updates.directoryCache = directoryCache;
 
   // 同步清除章节快照中已删书签的条目
   const snapshotData = await chrome.storage.local.get('chapterSnapshot');
@@ -200,8 +214,9 @@ async function finalizePartialReport(completedResults) {
     }
 
     // 尚未轮到的书签用缓存补齐
-    const cachedData = await chrome.storage.local.get('resultCache');
+    const cachedData = await chrome.storage.local.get(['resultCache', 'directoryCache']);
     const resultCache = cachedData.resultCache || {};
+    const directoryCache = cachedData.directoryCache || {};
 
     const results = [];
     for (const bookmark of bookmarks) {
@@ -212,7 +227,13 @@ async function finalizePartialReport(completedResults) {
       }
       // 兼容旧版以原始 URL 为键的缓存
       const cached = resultCache[cacheKey(bookmark.url)] || resultCache[bookmark.url];
-      if (cached) results.push(cached.result);
+      if (cached) {
+        results.push(cached.result);
+        continue;
+      }
+      // 目录页不参与 resultCache，用独立的 directoryCache 兜底
+      const dirCached = directoryCache[cacheKey(bookmark.url)] || directoryCache[bookmark.url];
+      if (dirCached) results.push(dirCached.result);
     }
 
     const reportData = buildReportData(results, {

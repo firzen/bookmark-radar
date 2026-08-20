@@ -161,12 +161,13 @@ const CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 缓存有效期 30 天
 
 /**
  * 加载可用缓存（归一化 URL → 结果）。
- * 强制模式立即清空缓存并随扫描重建，即使中途停止，
- * 下次普通扫描也能从新进度继续
+ * 强制模式不清空 storage 中的旧缓存，只返回空 map 使全部书签进入重扫；
+ * 旧数据保留作为中断兜底——finalizePartialReport 可从缓存补齐未轮到的条目，
+ * 避免停止扫描后丢失「非目录」等已知状态。新结果会随扫描自然覆写旧缓存。
  */
 async function loadCacheMap(force) {
   if (force) {
-    await chrome.storage.local.set({ resultCache: {} });
+    // 不清空 resultCache，仅返回空 map 让所有书签都走实际扫描
     return {};
   }
 
@@ -208,8 +209,9 @@ async function runScanQueue(bookmarks, { concurrency, onResult }) {
       workerQueues[i % workerCount].push(bm);
     });
 
-    const cachedData = await chrome.storage.local.get('resultCache');
+    const cachedData = await chrome.storage.local.get(['resultCache', 'directoryCache']);
     const resultCache = cachedData.resultCache || {};
+    const directoryCache = cachedData.directoryCache || {};
 
     const workerPromises = workerTabs.map(async (worker) => {
       const queue = workerQueues[worker.index];
@@ -230,6 +232,12 @@ async function runScanQueue(bookmarks, { concurrency, onResult }) {
         if (isCacheable(result)) {
           resultCache[cacheKey(bookmark.url)] = { result, checkedAt: Date.now() };
           await chrome.storage.local.set({ resultCache });
+        }
+        // 目录页不写 resultCache（避免下次扫描跳过），但写入独立的
+        // directoryCache 作为中断兜底，确保停止扫描不丢失已提取章节的状态
+        if (result.isDirectory) {
+          directoryCache[cacheKey(bookmark.url)] = { result, checkedAt: Date.now() };
+          await chrome.storage.local.set({ directoryCache });
         }
 
         // 若在加载期间被停止：结果已缓存，立即退出不再更新进度
