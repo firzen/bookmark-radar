@@ -697,3 +697,26 @@ body::-webkit-scrollbar-thumb:hover {
   border-radius: 6px;
   flex-shrink: 0;
 }
+
+/* 章节更新标记 */
+.chapter-new-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  color: #fff;
+  background: #ef4444;
+  border-radius: 3px;
+  vertical-align: middle;
+  cursor: default;
+}
+
+tr.chapter-updated {
+  background: #fef9ee;
+}
+
+tr.chapter-updated:hover {
+  background: #fef3cd;
+}

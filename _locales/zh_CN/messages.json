@@ -130,5 +130,11 @@
   "errServerGeneric": { "message": "$1 服务器错误" },
   "errAccessGeneric": { "message": "$1 访问被拒" },
   "netErrorPrefix": { "message": "网络错误" },
-  "staticFetchSuffix": { "message": "（后台抓取）" }
+  "staticFetchSuffix": { "message": "（后台抓取）" },
+
+  "chapterNew": { "message": "新" },
+  "txtPrevChapter": { "message": "上次：$1" },
+  "filterUpdated": { "message": "仅显示更新" },
+  "showAll": { "message": "显示全部" },
+  "updatedCount": { "message": "$1 项更新" }
 }

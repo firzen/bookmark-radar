@@ -16,9 +16,11 @@ const deleteBtn = document.getElementById('deleteBtn');
 const rescanConcurrency = document.getElementById('rescanConcurrency');
 const rescanTimeout = document.getElementById('rescanTimeout');
 const rescanHumanVerify = document.getElementById('rescanHumanVerify');
+const filterUpdatedBtn = document.getElementById('filterUpdatedBtn');
 
 let currentResults = null;
 let rescanning = false; // 重扫进行中，禁用重扫按钮
+let filterUpdated = false; // 「仅显示更新」筛选状态
 
 // 静态文案按浏览器语言填充
 applyI18n();
@@ -50,6 +52,17 @@ async function load() {
   renderReport(currentResults, { selectable: true });
   lastCheckIndex = -1; // 重渲染后旧锚点失效
   updateRescanBtn();
+  updateFilterBtn();
+  // 筛选状态在重渲染后恢复
+  if (filterUpdated) applyFilterUpdated(true);
+
+  // 无更新条目时隐藏筛选按钮
+  const hasUpdates = currentResults.results && currentResults.results.some((r) => r.chapterChanged);
+  filterUpdatedBtn.style.display = hasUpdates ? '' : 'none';
+  if (!hasUpdates) {
+    filterUpdated = false;
+    applyFilterUpdated(false);
+  }
 }
 
 // 实时消息：进度 / 完成 / 出错
@@ -214,3 +227,25 @@ confirmOk.addEventListener('click', async () => {
     deleteBtn.disabled = false;
   }
 });
+
+// --- 筛选「仅显示更新」 ---
+
+filterUpdatedBtn.addEventListener('click', () => {
+  filterUpdated = !filterUpdated;
+  applyFilterUpdated(filterUpdated);
+  updateFilterBtn();
+});
+
+function applyFilterUpdated(active) {
+  const reportSection = document.getElementById('reportSection');
+  if (active) {
+    reportSection.classList.add('filter-updated-active');
+  } else {
+    reportSection.classList.remove('filter-updated-active');
+  }
+}
+
+function updateFilterBtn() {
+  filterUpdatedBtn.textContent = filterUpdated ? t('showAll') : t('filterUpdated');
+  filterUpdatedBtn.classList.toggle('active', filterUpdated);
+}

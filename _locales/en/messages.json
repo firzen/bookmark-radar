@@ -130,5 +130,11 @@
   "errServerGeneric": { "message": "$1 server error" },
   "errAccessGeneric": { "message": "$1 access denied" },
   "netErrorPrefix": { "message": "Network error" },
-  "staticFetchSuffix": { "message": " (background fetch)" }
+  "staticFetchSuffix": { "message": " (background fetch)" },
+
+  "chapterNew": { "message": "NEW" },
+  "txtPrevChapter": { "message": "Previous: $1" },
+  "filterUpdated": { "message": "Show updates only" },
+  "showAll": { "message": "Show all" },
+  "updatedCount": { "message": "$1 updated" }
 }

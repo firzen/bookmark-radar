@@ -152,8 +152,10 @@ function createGroupElement(group, selectable) {
       </tr>
     </thead>
     <tbody>
-      ${group.items.map(item => `
-        <tr>
+      ${group.items.map(item => {
+        const isUpdated = group.key === 'success_dir' && item.chapterChanged;
+        return `
+        <tr${isUpdated ? ' data-chapter-updated="1"' : ''}>
           ${selectable ? `
           <td class="cell-check">
             <input type="checkbox" class="rescan-check" data-id="${escapeHtml(item.bookmarkId)}"${item.url ? ` data-url="${escapeHtml(item.url)}"` : ''}>
@@ -164,13 +166,14 @@ function createGroupElement(group, selectable) {
             </a>` : escapeHtml(item.bookmarkName)}
           </td>
           <td class="cell-title" title="${escapeHtml(item.pageTitle)}">
-            ${escapeHtml(item.pageTitle) || '—'}
+            ${escapeHtml(item.pageTitle) || '\u2014'}
           </td>
           <td class="cell-chapter ${item.lastChapter ? '' : 'na'}">
-            ${item.lastChapter ? escapeHtml(item.lastChapter) : escapeHtml(item.message || '—')}
+            ${item.lastChapter ? escapeHtml(item.lastChapter) : escapeHtml(item.message || '\u2014')}
+            ${isUpdated ? `<span class="chapter-new-badge" title="${escapeHtml(item.previousChapter || '')}">${t('chapterNew')}</span>` : ''}
           </td>
-        </tr>
-      `).join('')}
+        </tr>`;
+      }).join('')}
     </tbody>
   `;
 
@@ -203,8 +206,11 @@ function generateTextReport(data) {
     lines.push('-'.repeat(40));
     for (const item of group.items) {
       lines.push(`  ${t('txtBookmark', [item.bookmarkName])}`);
-      lines.push(`  ${t('txtTitle', [item.pageTitle || '—'])}`);
-      lines.push(`  ${t('txtLast', [item.lastChapter || item.message || '—'])}`);
+      lines.push(`  ${t('txtTitle', [item.pageTitle || '\u2014'])}`);
+      lines.push(`  ${t('txtLast', [item.lastChapter || item.message || '\u2014'])}`);
+      if (item.chapterChanged && item.previousChapter) {
+        lines.push(`  ${t('txtPrevChapter', [item.previousChapter])}`);
+      }
       lines.push('');
     }
   }

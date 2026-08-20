@@ -176,24 +176,28 @@ function analyzeBookmarkDocument(doc, locHref, tfn) {
       .trim();
   }
 
-  /** 单个章节列表内的最新一话：严格降序取首项，否则按首尾序号均值判升/降序 */
+  /** 单个章节列表内的最新一话：严格降序取首项，严格升序取末项，
+   *  非单调（如话/卷交叉排列）时遍历全部取序号最大值 */
   function latestInList(chapters) {
     const numbered = chapters.filter((cl) => cl.number !== null);
     if (numbered.length >= 3) {
       let strictlyDescending = true;
+      let strictlyAscending = true;
       for (let i = 1; i < numbered.length; i++) {
-        if (numbered[i].number >= numbered[i - 1].number) {
-          strictlyDescending = false;
-          break;
-        }
+        if (numbered[i].number >= numbered[i - 1].number) strictlyDescending = false;
+        if (numbered[i].number <= numbered[i - 1].number) strictlyAscending = false;
+        if (!strictlyDescending && !strictlyAscending) break;
       }
       if (strictlyDescending) return chapters[0];
+      if (strictlyAscending) return chapters[chapters.length - 1];
 
-      const head = numbered.slice(0, 3);
-      const tail = numbered.slice(-3);
-      const headAvg = head.reduce((s, cl) => s + cl.number, 0) / head.length;
-      const tailAvg = tail.reduce((s, cl) => s + cl.number, 0) / tail.length;
-      return tailAvg >= headAvg ? chapters[chapters.length - 1] : chapters[0];
+      // 非单调序列（如「话」与「卷」交叉排列）：取序号最大项，
+      // 避免 head/tail 均值法在交叉排列时误判最新话
+      let maxItem = numbered[0];
+      for (let i = 1; i < numbered.length; i++) {
+        if (numbered[i].number > maxItem.number) maxItem = numbered[i];
+      }
+      return maxItem;
     }
     return chapters[chapters.length - 1];
   }

@@ -342,14 +342,19 @@ async function startScan(concurrency, force, humanVerify, timeoutSec) {
       }
     }
 
+    // 章节变更对比：与上次快照比较，标记有更新的目录条目
+    const oldSnapshotData = await chrome.storage.local.get('chapterSnapshot');
+    const oldSnapshot = oldSnapshotData.chapterSnapshot || {};
+    const { results: markedResults, snapshot: newSnapshot } = buildChapterSnapshot(scanState.results, oldSnapshot);
+
     // 构建并保存报告数据
-    const reportData = buildReportData(scanState.results, {
+    const reportData = buildReportData(markedResults, {
       startTime: scanState.startTime,
       total: scanState.total,
       duplicates,
       emptyFolders,
     });
-    await chrome.storage.local.set({ scanResults: reportData });
+    await chrome.storage.local.set({ scanResults: reportData, chapterSnapshot: newSnapshot });
     notifyScanComplete();
   } catch (error) {
     console.error('[Bookmark Radar] 扫描过程出错:', error);
@@ -358,6 +363,62 @@ async function startScan(concurrency, force, humanVerify, timeoutSec) {
     scanState.isScanning = false;
     // 清除角标
     chrome.action.setBadgeText({ text: '' });
+  }
+}
+
+
+/**
+ * 对比旧章节快照，标记本次扫描中章节发生变化的目录条目，
+ * 并构建新快照。
+ * @param {Array} results 本次扫描结果
+ * @param {Object} oldSnapshot 上次的章节快照
+ * @returns {{ results: Array, snapshot: Object }}
+ */
+function buildChapterSnapshot(results, oldSnapshot) {
+  const newSnapshot = {};
+  const updatedResults = results.map((r) => {
+    if (!r.isDirectory || r.status !== 'success') return r;
+    const url = cacheKey(r.url);
+    const old = oldSnapshot[url];
+    const updated = { ...r };
+    if (old && old.lastChapter && old.lastChapter !== r.lastChapter) {
+      updated.chapterChanged = true;
+      updated.previousChapter = old.lastChapter;
+    }
+    newSnapshot[url] = { lastChapter: r.lastChapter, updatedAt: Date.now() };
+    return updated;
+  });
+  return { results: updatedResults, snapshot: newSnapshot };
+}
+
+/**
+ * 重扫后更新章节快照：对比并标记变更，保存新快照
+ */
+async function updateSnapshotForRescan(newResults) {
+  const data = await chrome.storage.local.get(['chapterSnapshot', 'scanResults']);
+  const snapshot = data.chapterSnapshot || {};
+  let snapshotChanged = false;
+
+  for (const [url, result] of newResults) {
+    if (!result.isDirectory || result.status !== 'success') continue;
+    const key = cacheKey(url);
+    const old = snapshot[key];
+    if (old && old.lastChapter && old.lastChapter !== result.lastChapter) {
+      result.chapterChanged = true;
+      result.previousChapter = old.lastChapter;
+    }
+    snapshot[key] = { lastChapter: result.lastChapter, updatedAt: Date.now() };
+    snapshotChanged = true;
+  }
+
+  if (snapshotChanged) {
+    await chrome.storage.local.set({ chapterSnapshot: snapshot });
+    // 同步更新 scanResults 中的对应条目，使报告页刷新后能看到标记
+    if (data.scanResults && Array.isArray(data.scanResults.results)) {
+      data.scanResults.results = data.scanResults.results.map((r) => newResults.get(r.url) || r);
+      data.scanResults.timestamp = new Date().toISOString();
+      await chrome.storage.local.set({ scanResults: data.scanResults });
+    }
   }
 }
 

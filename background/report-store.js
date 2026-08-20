@@ -129,6 +129,20 @@ async function pruneScanResults(ids) {
   }
   if (cacheChanged) updates.resultCache = resultCache;
 
+  // 同步清除章节快照中已删书签的条目
+  const snapshotData = await chrome.storage.local.get('chapterSnapshot');
+  const snapshot = snapshotData.chapterSnapshot || {};
+  let snapshotChanged = false;
+  for (const r of removed) {
+    if (!r.url) continue;
+    const key = cacheKey(r.url);
+    if (snapshot[key]) {
+      delete snapshot[key];
+      snapshotChanged = true;
+    }
+  }
+  if (snapshotChanged) updates.chapterSnapshot = snapshot;
+
   await chrome.storage.local.set(updates);
 }
 
@@ -161,6 +175,9 @@ async function mergeRescanResults(newResults, tree) {
     },
   };
   await chrome.storage.local.set({ scanResults: reportData });
+
+  // 同步更新章节快照（对比标记变更）
+  await updateSnapshotForRescan(newResults);
 }
 
 /**

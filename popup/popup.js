@@ -161,13 +161,18 @@ function showChapters(data) {
     return;
   }
   chaptersSection.classList.remove('hidden');
-  chaptersCount.textContent = t('itemsCount', [String(items.length)]);
+  const updatedCount = items.filter((item) => item.chapterChanged).length;
+  chaptersCount.textContent = t('itemsCount', [String(items.length)])
+    + (updatedCount > 0 ? ` \u00b7 ${t('updatedCount', [String(updatedCount)])}` : '');
   chaptersBody.innerHTML = items.map((item) => `
-    <tr>
+    <tr${item.chapterChanged ? ' class="chapter-updated"' : ''}>
       <td class="cell-bookmark">
         <a href="${escapeHtml(item.url)}" target="_blank" title="${escapeHtml(item.bookmarkName)}">${escapeHtml(item.bookmarkName)}</a>
       </td>
-      <td class="cell-chapter">${escapeHtml(item.lastChapter || '—')}</td>
+      <td class="cell-chapter">
+        ${escapeHtml(item.lastChapter || '\u2014')}
+        ${item.chapterChanged ? `<span class="chapter-new-badge" title="${escapeHtml(item.previousChapter || '')}">${t('chapterNew')}</span>` : ''}
+      </td>
     </tr>
   `).join('');
 }

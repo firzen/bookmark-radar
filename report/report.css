@@ -77,3 +77,23 @@ body {
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* 筛选按钮激活态 */
+.filter-btn.active {
+  background: #fef3cd;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+/* 筛选模式：隐藏非更新行，并折叠空分组 */
+#reportSection.filter-updated-active .group-section {
+  display: none;
+}
+
+#reportSection.filter-updated-active .group-section:has(tr[data-chapter-updated]) {
+  display: block;
+}
+
+#reportSection.filter-updated-active .group-section tr:not([data-chapter-updated]) {
+  display: none;
+}
