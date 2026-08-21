@@ -165,7 +165,7 @@ async function pruneScanResults(ids) {
  */
 async function mergeRescanResults(newResults, tree) {
   if (newResults.size === 0) return;
-  const data = await chrome.storage.local.get('scanResults');
+  const data = await chrome.storage.local.get(['scanResults', 'resultCache', 'directoryCache']);
   const old = data.scanResults;
   if (!old) return;
 
@@ -188,7 +188,34 @@ async function mergeRescanResults(newResults, tree) {
       emptyFolders: old.cleanup ? old.cleanup.emptyFolders : (tree ? findEmptyFolders(tree) : []),
     },
   };
-  await chrome.storage.local.set({ scanResults: reportData });
+
+  // 同步更新缓存：重扫结果必须写回 resultCache / directoryCache，
+  // 否则下次正常扫描会命中旧缓存（如旧版误判的非目录结果），覆盖重扫结论
+  const resultCache = data.resultCache || {};
+  const directoryCache = data.directoryCache || {};
+  let cacheChanged = false;
+
+  for (const [url, result] of newResults) {
+    const key = cacheKey(url);
+    if (isCacheable(result)) {
+      resultCache[key] = { result, checkedAt: Date.now() };
+    } else {
+      // 不可缓存的结果（目录页/超时/验证页等）：清除旧缓存，
+      // 避免下次正常扫描命中残留的旧非目录结果
+      if (resultCache[key]) delete resultCache[key];
+    }
+    if (result.isDirectory) {
+      directoryCache[key] = { result, checkedAt: Date.now() };
+    }
+    cacheChanged = true;
+  }
+
+  const updates = { scanResults: reportData };
+  if (cacheChanged) {
+    updates.resultCache = resultCache;
+    updates.directoryCache = directoryCache;
+  }
+  await chrome.storage.local.set(updates);
 
   // 同步更新章节快照（对比标记变更）
   await updateSnapshotForRescan(newResults);
