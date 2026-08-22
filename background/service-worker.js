@@ -12,7 +12,7 @@ importScripts(
   'scan-runner.js'
 );
 
-const DEFAULT_CONCURRENCY = 3; // 默认并发数
+const DEFAULT_CONCURRENCY = 1; // 默认并发数
 
 let humanVerifyEnabled = false; // 真人验证模式：验证页临时前台激活
 let loadTimeoutMs = 30000; // 页面加载超时（默认 30 秒，popup 可配置）

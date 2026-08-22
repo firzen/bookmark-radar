@@ -24,6 +24,14 @@ const emptyState = document.getElementById('emptyState');
 
 let scanFinished = true; // 忽略扫描结束后的残留进度消息
 
+// 记住上次选择的并发数
+concurrencySelect.addEventListener('change', () => {
+  chrome.storage.local.set({ lastConcurrency: parseInt(concurrencySelect.value, 10) });
+});
+chrome.storage.local.get('lastConcurrency').then((data) => {
+  if (data.lastConcurrency) concurrencySelect.value = String(data.lastConcurrency);
+});
+
 // 静态文案按浏览器语言填充
 applyI18n();
 
@@ -85,7 +93,8 @@ scanBtn.addEventListener('click', async () => {
   scanFinished = false;
   enterScanningUI();
 
-  const concurrency = parseInt(concurrencySelect.value, 10) || 3;
+  const concurrency = parseInt(concurrencySelect.value, 10) || 1;
+  chrome.storage.local.set({ lastConcurrency: concurrency });
   const timeout = parseInt(timeoutInput.value, 10) || 30;
   await chrome.runtime.sendMessage({ action: 'startScan', concurrency, force: forceScan.checked, humanVerify: humanVerify.checked, timeout });
 });

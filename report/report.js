@@ -22,6 +22,14 @@ let currentResults = null;
 let rescanning = false; // 重扫进行中，禁用重扫按钮
 let filterUpdated = false; // 「仅显示更新」筛选状态
 
+// 记住上次选择的并发数
+rescanConcurrency.addEventListener('change', () => {
+  chrome.storage.local.set({ lastConcurrency: parseInt(rescanConcurrency.value, 10) });
+});
+chrome.storage.local.get('lastConcurrency').then((data) => {
+  if (data.lastConcurrency) rescanConcurrency.value = String(data.lastConcurrency);
+});
+
 // 静态文案按浏览器语言填充
 applyI18n();
 
@@ -177,7 +185,8 @@ rescanBtn.addEventListener('click', async () => {
   if (urls.length === 0 || rescanning) return;
   rescanning = true;
   updateRescanBtn();
-  const concurrency = parseInt(rescanConcurrency.value, 10) || 3;
+  const concurrency = parseInt(rescanConcurrency.value, 10) || 1;
+  chrome.storage.local.set({ lastConcurrency: concurrency });
   const timeout = parseInt(rescanTimeout.value, 10) || 30;
   await chrome.runtime.sendMessage({ action: 'rescanBookmarks', urls, concurrency, timeout, humanVerify: rescanHumanVerify.checked });
 });
