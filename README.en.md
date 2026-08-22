@@ -8,17 +8,25 @@
 ![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
+## Screenshots
+
+| Scan | Report | Cleanup |
+|:---:|:---:|:---:|
+| ![Scan](promo/screenshots/en/1-scan.png) | ![Report](promo/screenshots/en/2-report.png) | ![Cleanup](promo/screenshots/en/3-cleanup.png) |
+
 ## Features
 
-- **Full scan + concurrency** — Reads all bookmarks and checks them with 1/3/5/10 concurrent tabs; the toolbar badge shows live progress percentage
-- **Smart cache** — 30-day per-bookmark cache for instant re-scans; directory pages (extracted chapters), timeouts and challenge pages are never cached so they are re-checked every scan to track updates; "Force" clears the cache and re-scans
+- **Full scan + concurrency** — Reads all bookmarks and checks them with 1/3/5/10 concurrent tabs (default 1, last choice remembered); the toolbar badge shows live progress percentage
+- **Smart cache** — 30-day per-bookmark cache for instant re-scans; directory pages (extracted chapters), timeouts and challenge pages are never cached so they are re-checked every scan to track updates; "Force" clears the cache and re-scans; rescan results are written back to the cache so stale conclusions never resurface
+- **Chapter update detection** — Compares against the previous chapter snapshot; bookmarks with new chapters are highlighted, and the report page can filter "updates only"
 - **Silent background** — Worker tabs live in a collapsed tab group and never interrupt your browsing
 - **Directory detection** — Automatically recognizes novel/manga directory pages (Chinese / English / Japanese chapter patterns) and extracts the last chapter with smart ordering detection
 - **Grouped report** — Results grouped by status: success / network error / access denied / server error / timeout / human verification; viewable full-width in a dedicated report tab
 - **Bookmark cleanup** — Detects dead links, load timeouts, duplicate bookmarks and empty folders; entries are clickable for manual confirmation, with batch deletion
+- **Selective rescan** — Check entries on the report page (Shift range-select supported) to bypass the cache and rescan; results merge into the report in place
 - **Reliable interruption** — Stop a scan at any time and instantly see partial results; auto-aborts (keeping progress) if a worker tab is closed accidentally
-- **Cloudflare handling** — Auto-detects challenge pages; optional "Human verify" mode temporarily brings the tab to the foreground so the JS challenge can run (background tabs have `requestAnimationFrame` suspended and can never pass); or pass it manually via the report link — the clearance cookie then applies to the whole domain
 - **Configurable timeout** — Page load timeout is user-configurable (default 30s, 5–300s)
+- **Cloudflare handling** — Auto-detects challenge pages; "Human verify" is checked by default and temporarily brings the tab to the foreground so the JS challenge can run (background tabs have `requestAnimationFrame` suspended and can never pass); or pass it manually via the report link — the clearance cookie then applies to the whole domain
 - **Export** — Copy as text / export JSON
 - **Bilingual UI** — Automatically switches between Chinese and English based on the browser language
 
@@ -33,10 +41,10 @@
 
 ## Usage
 
-1. Click the toolbar icon and configure concurrency / timeout seconds (check **Force** to clear the cache and re-scan; check **Human verify** to auto-pass challenge pages)
+1. Click the toolbar icon and configure concurrency / timeout seconds (check **Force** to clear the cache and re-scan; **Human verify** is checked by default — uncheck it to skip auto-passing challenges)
 2. Click **Start Scan**; you can **Stop** at any time to view partial results; the toolbar badge shows live progress
 3. The popup shows a quick list of **extracted chapters**; click **Open Full Report ↗** for the full-width report and bookmark cleanup
-4. In the report page, **Copy Text** or **Export JSON** to save the results
+4. In the report page, **check entries to rescan**, filter "updates only", or **Copy Text** / **Export JSON** to save the results
 
 ## Report Groups
 
@@ -84,14 +92,20 @@ This extension uses **background tabs + URL navigation** instead:
 ```
 bookmark-radar/
 ├── manifest.json              # MV3 extension config
+├── _locales/                  # Bilingual copy (chrome.i18n)
 ├── background/
-│   └── service-worker.js      # Scan orchestration (concurrency + cache + badge)
+│   ├── service-worker.js      # Entry: message routing and global config
+│   ├── checker.js             # Per-bookmark pipeline (static fetch → navigate → inject → challenge retry → fallback)
+│   ├── scan-runner.js         # Concurrency scheduling & progress (shared by full scan and rescan)
+│   └── report-store.js        # Report assembly, cache write-back and chapter snapshots
 ├── content/
-│   └── extractor.js           # Injected script (challenge detection + directory recognition)
+│   └── extractor.js           # Injected script (chapter extraction + directory recognition)
 ├── shared/
-│   └── renderer.js            # Shared report rendering (popup & report page)
+│   ├── classifier.js          # Single source of truth for classification (challenge/error markers, cache rules)
+│   ├── renderer.js            # Shared report rendering (popup & report page)
+│   └── i18n.js                # i18n helpers
 ├── popup/                     # Popup UI (scan controls + chapter quick list)
-├── report/                    # Full report page (full-width, new tab)
+├── report/                    # Full report page (selective rescan + cleanup + export)
 └── icons/
 ```
 
@@ -105,6 +119,8 @@ Load 30-day cache; skipped bookmarks count into progress immediately
 Create N background tabs + collapsed tab group; uncached bookmarks round-robin assigned
     ↓
 Each worker: navigate → wait for load → inject extractor → write result to cache
+    ↓
+Compare chapter snapshots → mark entries with new chapters as chapterChanged
     ↓
 Complete / stop / error → close tabs, clear badge → render report (popup + report page)
 ```
@@ -129,6 +145,7 @@ Score ≥ 3 and ≥ 5 chapter links → directory page. Supported patterns: `第
 | `storage` | Cache scan results |
 | `tabGroups` | Create the collapsed tab group |
 | `scripting` | Inject the extraction script into pages |
+| `webNavigation` | Watch tab navigation to capture network-layer errors (DNS / connection / SSL) |
 | `<all_urls>` | Allow visiting any bookmarked URL |
 
 > This extension never uploads any data; all processing happens locally.
@@ -140,6 +157,10 @@ No build tools required — plain vanilla JavaScript. Edit the source and hit re
 Debug entry points:
 - Service Worker: `chrome://extensions/` → click the "Service Worker" link
 - Popup: right-click the popup → "Inspect"
+
+## Repository
+
+- GitHub: <https://github.com/firzen/bookmark-radar>
 
 ## License
 
